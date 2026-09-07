@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 let browserClient: SupabaseClient | null = null;
 
 /**
- * Browser/client Supabase instance.
+ * Browser Supabase client (anon key).
  * Requires NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.
  */
 export function createSupabaseClient(): SupabaseClient {
@@ -26,3 +26,6 @@ export function createSupabaseClient(): SupabaseClient {
 
   return browserClient;
 }
+
+/** Convenience singleton for Client Components */
+export const supabase = () => createSupabaseClient();

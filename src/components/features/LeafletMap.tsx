@@ -1,16 +1,24 @@
 "use client";
 
+import { MapContainer, TileLayer } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+
 /**
- * Leaflet map stub for fleet / delivery tracking.
- * Import with next/dynamic and { ssr: false }, and load `leaflet/dist/leaflet.css`.
- *
- * Example:
- *   const LeafletMap = dynamic(() => import("@/components/features/LeafletMap").then(m => m.LeafletMap), { ssr: false });
+ * Basic Leaflet map shell (fleet placeholder).
+ * Prefer CustomerMap for sales check-in with markers.
  */
 export function LeafletMap() {
   return (
-    <div className="flex min-h-64 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-      Leaflet map placeholder
-    </div>
+    <MapContainer
+      center={[10.7769, 106.7009]}
+      zoom={12}
+      className="z-0 h-64 w-full rounded-lg border border-border"
+      scrollWheelZoom={false}
+    >
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+    </MapContainer>
   );
 }

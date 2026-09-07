@@ -6,8 +6,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Direct (non-pooled) connection for migrations — required with Supabase PgBouncer
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -15,6 +17,7 @@ enum UserRole {
   SALES
   FLEET
   DEALER
+  ACCOUNTANT
 }
 
 enum OrderStatus {
@@ -25,39 +28,69 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum CustomerType {
+  GARAGE
+  FLEET
+}
+
+enum MeterUnit {
+  KM
+  HOUR
+}
+
+enum PointLedgerReason {
+  SCAN
+  REDEEM
+}
+
+enum DrumTxnType {
+  ISSUE
+  RETURN
+  ADJUST
+}
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  role      UserRole @default(SALES)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  orders    Order[]
+  id               String            @id @default(cuid())
+  email            String            @unique
+  name             String?
+  role             UserRole          @default(SALES)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  orders           Order[]
+  checkIns         VisitCheckIn[]
+  drumTransactions DrumTransaction[]
 }
 
 model Product {
-  id        String      @id @default(cuid())
-  sku       String      @unique
-  name      String
-  viscosity String?
-  volume    String?
-  unitPrice Decimal     @db.Decimal(12, 2)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  items     OrderItem[]
+  id               String            @id @default(cuid())
+  sku              String            @unique
+  name             String
+  viscosity        String?
+  standard         String?
+  volume           String?
+  unitPrice        Decimal           @db.Decimal(12, 2)
+  stock            Int               @default(0)
+  isDrum           Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  items            OrderItem[]
+  drumTransactions DrumTransaction[]
 }
 
 /// Supports offline capture via localId before server sync.
 model Order {
-  id        String      @id @default(cuid())
-  localId   String?     @unique
-  status    OrderStatus @default(DRAFT)
-  userId    String
-  user      User        @relation(fields: [userId], references: [id])
-  syncedAt  DateTime?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  items     OrderItem[]
+  id               String            @id @default(cuid())
+  localId          String?           @unique
+  status           OrderStatus       @default(DRAFT)
+  userId           String
+  user             User              @relation(fields: [userId], references: [id])
+  customerId       String
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  syncedAt         DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  items            OrderItem[]
+  drumTransactions DrumTransaction[]
 }
 
 model OrderItem {
@@ -68,4 +101,121 @@ model OrderItem {
   product   Product @relation(fields: [productId], references: [id])
   quantity  Int
   unitPrice Decimal @db.Decimal(12, 2)
+}
+
+model Customer {
+  id               String            @id @default(cuid())
+  name             String
+  phone            String?
+  address          String?
+  type             CustomerType      @default(GARAGE)
+  creditLimit      Decimal           @default(0) @db.Decimal(14, 2)
+  currentDebt      Decimal           @default(0) @db.Decimal(14, 2)
+  outstandingDrums Int               @default(0)
+  lat              Decimal?          @db.Decimal(10, 7)
+  lng              Decimal?          @db.Decimal(10, 7)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  orders           Order[]
+  checkIns         VisitCheckIn[]
+  vehicles         FleetVehicle[]
+  drumTransactions DrumTransaction[]
+}
+
+model DrumTransaction {
+  id         String      @id @default(cuid())
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  type       DrumTxnType
+  quantity   Int
+  productId  String?
+  product    Product?    @relation(fields: [productId], references: [id])
+  orderId    String?
+  order      Order?      @relation(fields: [orderId], references: [id])
+  notes      String?
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  createdAt  DateTime    @default(now())
+}
+
+model FleetVehicle {
+  id               String    @id @default(cuid())
+  customerId       String
+  customer         Customer  @relation(fields: [customerId], references: [id])
+  plateNumber      String    @unique
+  label            String?
+  unit             MeterUnit @default(KM)
+  currentMeter     Int
+  lastServiceMeter Int
+  intervalValue    Int
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model VisitCheckIn {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  lat        Decimal  @db.Decimal(10, 7)
+  lng        Decimal  @db.Decimal(10, 7)
+  distanceM  Float
+  createdAt  DateTime @default(now())
+}
+
+model Mechanic {
+  id           String             @id @default(cuid())
+  name         String
+  phone        String             @unique
+  points       Int                @default(0)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  codes        LoyaltyCode[]
+  ledger       PointLedger[]
+  redemptions  RewardRedemption[]
+}
+
+model LoyaltyCode {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  points     Int       @default(10)
+  productSku String?
+  redeemedAt DateTime?
+  mechanicId String?
+  mechanic   Mechanic? @relation(fields: [mechanicId], references: [id])
+  createdAt  DateTime  @default(now())
+}
+
+model LoyaltyReward {
+  id          String             @id @default(cuid())
+  name        String
+  pointsCost  Int
+  stock       Int                @default(0)
+  active      Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  redemptions RewardRedemption[]
+}
+
+model PointLedger {
+  id         String            @id @default(cuid())
+  mechanicId String
+  mechanic   Mechanic          @relation(fields: [mechanicId], references: [id])
+  delta      Int
+  reason     PointLedgerReason
+  refId      String?
+  note       String?
+  createdAt  DateTime          @default(now())
+}
+
+model RewardRedemption {
+  id          String        @id @default(cuid())
+  mechanicId  String
+  mechanic    Mechanic      @relation(fields: [mechanicId], references: [id])
+  rewardId    String
+  reward      LoyaltyReward @relation(fields: [rewardId], references: [id])
+  pointsSpent Int
+  createdAt   DateTime      @default(now())
 }

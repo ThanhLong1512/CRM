@@ -1,10 +1,22 @@
-export default function DashboardPage() {
+import { DashboardPageClient } from "@/app/(private)/dashboard/DashboardPageClient";
+import { getDashboardOverview } from "@/lib/data/dashboard";
+import { listHungerAlerts } from "@/lib/data/hunger";
+import { listRfmSegments } from "@/lib/data/rfm";
+
+export const dynamic = "force-dynamic";
+
+export default async function DashboardPage() {
+  const [overview, hungerAlerts, rfm] = await Promise.all([
+    getDashboardOverview(),
+    listHungerAlerts(),
+    listRfmSegments(),
+  ]);
+
   return (
-    <div className="space-y-2">
-      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-      <p className="text-muted-foreground">
-        CRM overview placeholder for sales KPIs and fleet status.
-      </p>
-    </div>
+    <DashboardPageClient
+      overview={overview}
+      hungerAlerts={hungerAlerts}
+      rfm={rfm}
+    />
   );
 }

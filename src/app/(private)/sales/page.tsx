@@ -1,15 +1,14 @@
-import { QRScanner } from "@/components/features/QRScanner";
+import { SalesPageClient } from "@/app/(private)/sales/SalesPageClient";
+import { listTodayCheckIns } from "@/lib/data/check-ins";
+import { listCustomers } from "@/lib/data/customers";
 
-export default function SalesPage() {
+export default async function SalesPage() {
+  const [customers, todayCheckIns] = await Promise.all([
+    listCustomers(),
+    listTodayCheckIns(),
+  ]);
+
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Sales</h1>
-        <p className="text-muted-foreground">
-          Order capture and QR scanning placeholder.
-        </p>
-      </div>
-      <QRScanner />
-    </div>
+    <SalesPageClient customers={customers} todayCheckIns={todayCheckIns} />
   );
 }

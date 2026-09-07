@@ -1,23 +1,18 @@
-"use client";
+import { FleetPageClient } from "@/app/(private)/fleet/FleetPageClient";
+import { listFleetCustomers, listFleetVehicles } from "@/lib/data/fleet";
 
-import dynamic from "next/dynamic";
+export const dynamic = "force-dynamic";
 
-const LeafletMap = dynamic(
-  () =>
-    import("@/components/features/LeafletMap").then((mod) => mod.LeafletMap),
-  { ssr: false },
-);
+export default async function FleetPage() {
+  const [vehicles, customers] = await Promise.all([
+    listFleetVehicles(),
+    listFleetCustomers(),
+  ]);
 
-export default function FleetPage() {
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Fleet</h1>
-        <p className="text-muted-foreground">
-          Delivery routes and vehicle tracking placeholder.
-        </p>
-      </div>
-      <LeafletMap />
-    </div>
+    <FleetPageClient
+      vehicles={vehicles}
+      customers={customers.map((c) => ({ id: c.id, name: c.name }))}
+    />
   );
 }
