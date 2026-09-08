@@ -96,6 +96,13 @@ Xây dựng hệ thống CRM/DMS chuyên biệt cho nhà phân phối dầu nh�
 - [x] Ma trận RFM
 - [x] ✅ **Phase 3 complete** — Module 5 (Dashboard / Đói hàng / RFM) đã xong.
 
+**Phase 4: Real-world Enterprise Enhancements (Hoàn thành)**
+- [x] Sổ Thu Nợ & Lập Phiếu Thu Tiền Mặt / Chuyển Khoản (`DebtPayment` CSDL thật)
+- [x] Báo Cáo Phân Tích Tuổi Nợ (Debt Aging Matrix: Trong hạn, 1-15d, 16-30d, Nợ xấu >30d)
+- [x] Cơ chế Chiết Khấu Thương Mại (%) & Quà Tặng Khuyến Mãi trên Đơn Hàng
+- [x] Quy Đổi Đơn Vị Đóng Gói Ra Thể Tích Chuẩn Ngành (Tổng số Lít xuất kho)
+- [x] ✅ **Phase 4 complete** — Nâng tầm dự án lên chuẩn vận hành thực tế tại NPP dầu nhớt.
+
 ---
 
 ## 🤖 CHỈ THỊ DÀNH CHO CURSOR AI (CURSOR INSTRUCTIONS)

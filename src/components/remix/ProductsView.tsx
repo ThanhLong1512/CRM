@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useState, useMemo, FormEvent } from 'react';
 import { Product, PackageType } from '../types';
 import { formatVND } from '@/lib/remix/mappers';
@@ -22,7 +22,9 @@ import {
   Wrench,
   Truck,
   ArrowUpDown,
+  BookOpen,
 } from 'lucide-react';
+import LubeGuideModal from './LubeGuideModal';
 
 interface ProductsViewProps {
   products: Product[];
@@ -71,6 +73,7 @@ export default function ProductsView({
     product: Product;
     delta: number;
   } | null>(null);
+  const [showLubeGuide, setShowLubeGuide] = useState(false);
 
   const totalSKUs = products.length;
   const drumStockCount = products
@@ -215,14 +218,24 @@ export default function ProductsView({
           </p>
         </div>
 
-        <button
-          id="btn-add-product"
-          onClick={() => handleOpenDrawer()}
-          className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-xs transition-all hover:bg-amber-600 hover:shadow-sm cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Thêm Sản Phẩm Mới</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowLubeGuide(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-800 shadow-xs transition-all hover:bg-slate-50 cursor-pointer"
+          >
+            <BookOpen className="w-4 h-4 text-amber-600" />
+            <span>Tra Cứu Lube Guide &amp; Đổi Mã Nhớt</span>
+          </button>
+          <button
+            id="btn-add-product"
+            onClick={() => handleOpenDrawer()}
+            className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-xs transition-all hover:bg-amber-600 hover:shadow-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Thêm Sản Phẩm Mới</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. KPI Summary 4 Cards */}
@@ -484,6 +497,25 @@ export default function ProductsView({
                             {formatVND(p.priceFleet)}
                           </span>
                         </div>
+                        {(() => {
+                          const liters =
+                            p.packageType === "Phuy 200L"
+                              ? 200
+                              : p.packageType === "Thùng 18L"
+                              ? 18
+                              : p.packageType === "Xô 4L"
+                              ? 4
+                              : 1;
+                          const perLiter = Math.round(p.priceDealer / liters);
+                          return (
+                            <div className="pt-1 border-t border-slate-100 flex items-center justify-between gap-2 text-[10px]">
+                              <span className="text-slate-400 font-sans">Quy đổi Lít:</span>
+                              <span className="font-extrabold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/80">
+                                ~{formatVND(perLiter)}/L
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </td>
 
@@ -772,6 +804,16 @@ export default function ProductsView({
           </div>
         </div>
       )}
+
+      {/* Lube Guide & Cross Reference Modal */}
+      <LubeGuideModal
+        isOpen={showLubeGuide}
+        onClose={() => setShowLubeGuide(false)}
+        onSelectProductSku={(sku) => {
+          setSearchTerm(sku);
+          setShowLubeGuide(false);
+        }}
+      />
     </div>
   );
 }

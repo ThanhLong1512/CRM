@@ -32,7 +32,11 @@ import {
   Layers,
   Ban,
   GripVertical,
+  Printer,
+  MessageCircle,
 } from "lucide-react";
+import OrderPrintReceipt from "./OrderPrintReceipt";
+import ZaloShareModal from "./ZaloShareModal";
 
 interface KanbanViewProps {
   orders: Order[];
@@ -96,12 +100,14 @@ const prevStatusMap: Record<OrderStatus, OrderStatus | null> = {
 function OrderCardBody({
   order,
   onOpenDetail,
+  onPrint,
   onMove,
   onCancel,
   dragHandleProps,
 }: {
   order: Order;
   onOpenDetail: () => void;
+  onPrint?: () => void;
   onMove: (status: OrderStatus) => void;
   onCancel?: () => void;
   dragHandleProps?: ButtonHTMLAttributes<HTMLButtonElement>;
@@ -204,6 +210,16 @@ function OrderCardBody({
             <Eye className="size-3 text-slate-500" />
             Chi tiết
           </button>
+          {onPrint ? (
+            <button
+              type="button"
+              onClick={onPrint}
+              className="cursor-pointer rounded-lg border border-slate-200 p-1.5 text-blue-600 transition-colors hover:bg-blue-50"
+              title="In phiếu xuất kho (K80 / A4)"
+            >
+              <Printer className="size-3.5" />
+            </button>
+          ) : null}
           {canCancel && onCancel ? (
             <button
               type="button"
@@ -237,11 +253,13 @@ function OrderCardBody({
 function DraggableOrderCard({
   order,
   onOpenDetail,
+  onPrint,
   onMove,
   onCancel,
 }: {
   order: Order;
   onOpenDetail: () => void;
+  onPrint?: () => void;
   onMove: (status: OrderStatus) => void;
   onCancel?: () => void;
 }) {
@@ -261,6 +279,7 @@ function DraggableOrderCard({
       <OrderCardBody
         order={order}
         onOpenDetail={onOpenDetail}
+        onPrint={onPrint}
         onMove={onMove}
         onCancel={onCancel}
         dragHandleProps={{ ...listeners, ...attributes }}
@@ -273,12 +292,14 @@ function DroppableColumn({
   column,
   orders,
   onOpenDetail,
+  onPrint,
   onMove,
   onCancel,
 }: {
   column: (typeof COLUMNS)[number];
   orders: Order[];
   onOpenDetail: (order: Order) => void;
+  onPrint: (order: Order) => void;
   onMove: (orderId: string, status: OrderStatus) => void;
   onCancel?: (orderId: string) => void;
 }) {
@@ -320,6 +341,7 @@ function DroppableColumn({
               key={order.id}
               order={order}
               onOpenDetail={() => onOpenDetail(order)}
+              onPrint={() => onPrint(order)}
               onMove={(status) => onMove(order.id, status)}
               onCancel={onCancel ? () => onCancel(order.id) : undefined}
             />
@@ -336,6 +358,8 @@ export default function KanbanView({
   onCancelOrder,
 }: KanbanViewProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
+  const [zaloOrder, setZaloOrder] = useState<Order | null>(null);
   const [filterSearch, setFilterSearch] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -444,6 +468,7 @@ export default function KanbanView({
                 column={col}
                 orders={colOrders}
                 onOpenDetail={setSelectedOrder}
+                onPrint={setPrintingOrder}
                 onMove={handleMoveOrder}
                 onCancel={onCancelOrder}
               />
@@ -540,21 +565,38 @@ export default function KanbanView({
             </div>
 
             <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
-              {selectedOrder.status !== "Hoàn thành" && onCancelOrder ? (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    onCancelOrder(selectedOrder.id);
-                    setSelectedOrder(null);
-                  }}
-                  className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-rose-200 px-4 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50"
+                  onClick={() => setPrintingOrder(selectedOrder)}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
                 >
-                  <Ban className="size-3.5" />
-                  Hủy đơn
+                  <Printer className="size-3.5 text-blue-600" />
+                  In phiếu (K80/A4)
                 </button>
-              ) : (
-                <div />
-              )}
+                <button
+                  type="button"
+                  onClick={() => setZaloOrder(selectedOrder)}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-sky-300 bg-sky-50 px-3.5 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100"
+                  title="Gửi phiếu xác nhận đơn hàng qua Zalo cho garage"
+                >
+                  <MessageCircle className="size-3.5 text-blue-600" />
+                  Gửi Zalo
+                </button>
+                {selectedOrder.status !== "Hoàn thành" && onCancelOrder ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onCancelOrder(selectedOrder.id);
+                      setSelectedOrder(null);
+                    }}
+                    className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-rose-200 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50"
+                  >
+                    <Ban className="size-3.5" />
+                    Hủy đơn
+                  </button>
+                ) : null}
+              </div>
               <button
                 type="button"
                 onClick={() => setSelectedOrder(null)}
@@ -566,6 +608,21 @@ export default function KanbanView({
           </div>
         </div>
       )}
+
+      {/* Mobile Thermal / A4 Print Receipt Modal */}
+      <OrderPrintReceipt
+        order={printingOrder}
+        isOpen={Boolean(printingOrder)}
+        onClose={() => setPrintingOrder(null)}
+      />
+
+      {/* 1-Click Zalo Direct Chat Notification Modal */}
+      <ZaloShareModal
+        isOpen={Boolean(zaloOrder)}
+        onClose={() => setZaloOrder(null)}
+        order={zaloOrder}
+        initialTemplate="order"
+      />
     </div>
   );
 }

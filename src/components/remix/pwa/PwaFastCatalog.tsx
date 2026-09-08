@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useState, useMemo } from 'react';
 import { Product, Customer } from '../../types';
 import { formatVND } from '../../mockData';
@@ -13,8 +13,10 @@ import {
   Layers,
   Sparkles,
   Droplet,
+  BookOpen,
 } from 'lucide-react';
 import PwaNumpadDrawer from './PwaNumpadDrawer';
+import LubeGuideModal from '../LubeGuideModal';
 
 interface PwaFastCatalogProps {
   products: Product[];
@@ -44,6 +46,7 @@ export default function PwaFastCatalog({
 }: PwaFastCatalogProps) {
   const [selectedCat, setSelectedCat] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showLubeGuide, setShowLubeGuide] = useState<boolean>(false);
   const [numpadProduct, setNumpadProduct] = useState<{ product: Product; unitPrice: number } | null>(null);
 
   // Determine applicable price based on customer type
@@ -53,51 +56,53 @@ export default function PwaFastCatalog({
     return p.priceDealer;
   };
 
+  // 1-Tap Reorder Favorite Product for Active Customer
+  const favoriteProduct = useMemo(() => {
+    if (activeCustomer.favoriteSku) {
+      const match = products.find(
+        (p) => p.sku === activeCustomer.favoriteSku || p.id === activeCustomer.favoriteSku
+      );
+      if (match) return match;
+    }
+    return products[0];
+  }, [products, activeCustomer]);
+
   // Filter products by category and search
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       // Category filter
       if (selectedCat === 'engine' && !p.category.toLowerCase().includes('động cơ') && !p.category.toLowerCase().includes('diesel') && !p.category.toLowerCase().includes('xăng')) return false;
-      if (selectedCat === 'gear' && !p.category.toLowerCase().includes('hộp số') && !p.category.toLowerCase().includes('cầu')) return false;
+      if (selectedCat === 'gear' && !p.category.toLowerCase().includes('cầu') && !p.category.toLowerCase().includes('hộp số')) return false;
       if (selectedCat === 'hydraulic' && !p.category.toLowerCase().includes('thủy lực')) return false;
-      if (selectedCat === 'coolant' && !p.category.toLowerCase().includes('mát') && !p.category.toLowerCase().includes('nước')) return false;
+      if (selectedCat === 'coolant' && !p.category.toLowerCase().includes('mát')) return false;
       if (selectedCat === 'additive' && !p.category.toLowerCase().includes('phụ gia')) return false;
 
-      // Search query
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchName = p.name.toLowerCase().includes(query);
-        const matchSku = p.sku.toLowerCase().includes(query);
-        const matchViscosity = p.viscosity.toLowerCase().includes(query);
-        return matchName || matchSku || matchViscosity;
+      // Search term filter
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return (
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          p.viscosity.toLowerCase().includes(q) ||
+          p.brand.toLowerCase().includes(q)
+        );
       }
-
       return true;
     });
   }, [products, selectedCat, searchQuery]);
 
-  // Cart summary calculations
-  const { totalItems, totalCartValue } = useMemo(() => {
-    let itemsCount = 0;
-    let sum = 0;
-    Object.entries(cart).forEach(([prodId, qty]) => {
-      if (qty > 0) {
-        itemsCount += qty;
-        const prod = products.find((p) => p.id === prodId);
-        if (prod) {
-          sum += qty * getProductPrice(prod);
-        }
-      }
-    });
-    return { totalItems: itemsCount, totalCartValue: sum };
+  // Derived cart analytics
+  const totalItems = Object.values(cart).reduce<number>((sum, qty) => sum + (Number(qty) || 0), 0);
+  const totalCartValue = useMemo(() => {
+    return Object.entries(cart).reduce<number>((sum, [prodId, qty]) => {
+      const prod = products.find((p) => p.id === prodId);
+      if (!prod) return sum;
+      return sum + (Number(qty) || 0) * getProductPrice(prod);
+    }, 0);
   }, [cart, products, activeCustomer]);
 
+  // Audio assisted cart update
   const handleStepQty = (productId: string, delta: number) => {
-    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-      try {
-        navigator.vibrate(15);
-      } catch {}
-    }
     soundFX.playClick();
     onUpdateCartQty(productId, delta);
   };
@@ -123,16 +128,16 @@ export default function PwaFastCatalog({
           </span>
         </div>
 
-        {/* Quick Search Bar */}
-        <div className="p-3.5 pb-2 w-full">
-          <div className="relative">
+        {/* Quick Search Bar & Lube Guide Action */}
+        <div className="p-3.5 pb-2 w-full flex items-center gap-2">
+          <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Tìm mã nhớt, SKU, 15W-40, VG 68, Castrol, Shell, Motul..."
+              placeholder="Tìm mã nhớt, 15W-40, VG 68, Castrol, Shell..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-12 pl-10 pr-4 rounded-xl bg-slate-100 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 border border-slate-200"
+              className="w-full h-11 pl-10 pr-8 rounded-xl bg-slate-100 text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 border border-slate-200"
             />
             {searchQuery && (
               <button
@@ -143,6 +148,15 @@ export default function PwaFastCatalog({
               </button>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => setShowLubeGuide(true)}
+            className="h-11 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer active:scale-95 transition-transform"
+            title="Tra cứu Lube Guide & Đổi mã nhớt đối thủ"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span className="hidden sm:inline">Lube Guide</span>
+          </button>
         </div>
 
         {/* Horizontal Sticky Snap-Scroll Categories */}
@@ -169,6 +183,60 @@ export default function PwaFastCatalog({
         </div>
       </div>
 
+      {/* 1-Tap Quick Reorder / Favorite Product for this Customer (3-Touch Ordering Step 2) */}
+      {favoriteProduct && (
+        <div className="mx-4 sm:mx-5 mt-4 p-4 rounded-2xl bg-linear-to-r from-amber-500/15 via-amber-500/5 to-transparent border border-amber-300/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="size-11 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs">
+              <Sparkles className="size-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 bg-amber-200 px-2 py-0.5 rounded">
+                  ⭐ Hàng Hay Nhập Nhất Của Khách
+                </span>
+                <span className="font-mono text-xs font-bold text-slate-600">
+                  {favoriteProduct.viscosity}
+                </span>
+              </div>
+              <h4 className="text-sm sm:text-base font-extrabold text-slate-900 mt-0.5 leading-tight">
+                {favoriteProduct.name}
+              </h4>
+              <div className="flex items-center gap-2 text-xs font-mono mt-0.5">
+                <span className="font-black text-amber-700">
+                  {formatVND(getProductPrice(favoriteProduct))}
+                </span>
+                <span className="text-slate-400">&bull;</span>
+                <span className="text-slate-500 font-semibold">
+                  ~{formatVND(Math.round(getProductPrice(favoriteProduct) / (favoriteProduct.packageType === "Phuy 200L" ? 200 : favoriteProduct.packageType === "Thùng 18L" ? 18 : 4)))}/Lít
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 1-Tap Instant Add Buttons */}
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => handleStepQty(favoriteProduct.id, 1)}
+              className="flex-1 sm:flex-initial h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+            >
+              <Plus className="size-4" />
+              <span>+1 {favoriteProduct.packageType === 'Phuy 200L' ? 'Phuy' : 'Thùng'} Ngay</span>
+            </button>
+            {favoriteProduct.packageType === 'Phuy 200L' && (
+              <button
+                type="button"
+                onClick={() => handleStepQty(favoriteProduct.id, 2)}
+                className="flex-1 sm:flex-initial h-11 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-extrabold text-xs flex items-center justify-center gap-1 shadow-md cursor-pointer transition-all"
+              >
+                <span>+2 Phuy Combo</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Product List Canvas - Responsive Multi-Column Grid */}
       <div className="p-4 sm:p-5 w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredProducts.length === 0 ? (
@@ -180,6 +248,15 @@ export default function PwaFastCatalog({
             const unitPrice = getProductPrice(product);
             const inCartQty = cart[product.id] || 0;
             const isLowStock = product.stock <= product.minSafeStock;
+            const litersPerUnit =
+              product.packageType === "Phuy 200L"
+                ? 200
+                : product.packageType === "Thùng 18L"
+                ? 18
+                : product.packageType === "Xô 4L"
+                ? 4
+                : 1;
+            const pricePerLiter = Math.round(unitPrice / litersPerUnit);
 
             // Thumbnail background color based on packaging
             let badgeBg = 'bg-amber-500 text-slate-950';
@@ -233,9 +310,14 @@ export default function PwaFastCatalog({
                     {product.name}
                   </h4>
 
-                  {/* Pricing */}
-                  <div className="text-sm sm:text-base font-mono font-black text-amber-700 mt-1">
-                    {formatVND(unitPrice)} <span className="text-xs text-slate-500 font-medium">/ {product.unit}</span>
+                  {/* Pricing with Liter Conversion */}
+                  <div className="flex items-baseline gap-2 flex-wrap mt-1">
+                    <span className="text-sm sm:text-base font-mono font-black text-amber-700">
+                      {formatVND(unitPrice)} <span className="text-xs text-slate-500 font-medium">/ {product.unit}</span>
+                    </span>
+                    <span className="text-[11px] font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80">
+                      ~{formatVND(pricePerLiter)}/L
+                    </span>
                   </div>
 
                   {/* Stock Indicator */}
@@ -342,6 +424,16 @@ export default function PwaFastCatalog({
           onClose={() => setNumpadProduct(null)}
         />
       )}
+
+      {/* Lube Guide & Cross Reference Modal */}
+      <LubeGuideModal
+        isOpen={showLubeGuide}
+        onClose={() => setShowLubeGuide(false)}
+        onSelectProductSku={(sku) => {
+          setSearchQuery(sku);
+          setShowLubeGuide(false);
+        }}
+      />
     </div>
   );
 }

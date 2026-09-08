@@ -29,7 +29,13 @@ export async function listOrders(): Promise<OrderDto[]> {
       };
     });
 
-    const total = items.reduce((sum, item) => sum + item.lineTotal, 0);
+    const rawTotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+    const discountAmount = Number(order.discountAmount) || 0;
+    const discountPercent = order.discountPercent || 0;
+    const computedDiscount = discountAmount > 0 
+      ? discountAmount 
+      : (discountPercent > 0 ? (rawTotal * discountPercent / 100) : 0);
+    const total = Math.max(0, rawTotal - computedDiscount);
 
     return {
       id: order.id,
@@ -40,6 +46,11 @@ export async function listOrders(): Promise<OrderDto[]> {
       userName: order.user.name,
       userEmail: order.user.email,
       total,
+      rawTotal,
+      discountPercent: order.discountPercent,
+      discountAmount: Number(order.discountAmount),
+      promotionNotes: order.promotionNotes,
+      totalLiters: order.totalLiters,
       itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
       items,
       createdAt: order.createdAt.toISOString(),

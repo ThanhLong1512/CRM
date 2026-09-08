@@ -26,7 +26,12 @@ import {
   CloudOff,
   RefreshCw,
   CheckCircle2,
+  Printer,
+  MessageCircle,
+  Flame,
 } from 'lucide-react';
+import OrderPrintReceipt from './OrderPrintReceipt';
+import ZaloShareModal from './ZaloShareModal';
 
 export type PwaTab = 'route' | 'catalog';
 
@@ -75,6 +80,9 @@ export default function SalesPWAView({
   // Cart state: Record<productId, quantity>
   const [cart, setCart] = useState<Record<string, number>>({});
   const [isReviewDrawerOpen, setIsReviewDrawerOpen] = useState<boolean>(false);
+  const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
+  const [lastSubmittedOrder, setLastSubmittedOrder] = useState<Order | null>(null);
+  const [showZaloModal, setShowZaloModal] = useState<boolean>(false);
 
   // Syncing state
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -153,11 +161,16 @@ export default function SalesPWAView({
     customer: Customer;
     items: { product: Product; quantity: number; unitPrice: number; subtotal: number }[];
     totalAmount: number;
+    discountPercent?: number;
+    discountAmount?: number;
+    promotionNotes?: string;
+    totalLiters?: number;
     drumDelivered: number;
     drumReturned: number;
     drumDepositAmount: number;
     signatureBase64?: string;
     isEmergencyApproved: boolean;
+    cashCollected?: number;
   }) => {
     const newOrder: Order = {
       id: `ORD-${Date.now().toString().slice(-6)}`,
@@ -166,6 +179,10 @@ export default function SalesPWAView({
       customerType: orderPayload.customer.type,
       createdAt: new Date().toISOString(),
       status: 'Chờ duyệt',
+      discountPercent: orderPayload.discountPercent,
+      discountAmount: orderPayload.discountAmount,
+      promotionNotes: orderPayload.promotionNotes,
+      totalLiters: orderPayload.totalLiters,
       items: orderPayload.items.map((it) => ({
         productId: it.product.id,
         productName: it.product.name,
@@ -183,12 +200,18 @@ export default function SalesPWAView({
       isOverCredit: orderPayload.isEmergencyApproved,
     };
 
+    if (orderPayload.cashCollected && orderPayload.cashCollected > 0) {
+      handleCollectCashDebt(orderPayload.customer.id, orderPayload.cashCollected);
+    }
+
     if (isGlobalOffline) {
       await enqueueOfflineOrder(newOrder);
     }
     onSubmitOrder(newOrder, isGlobalOffline);
     setCart({});
     setIsReviewDrawerOpen(false);
+    setLastSubmittedOrder(newOrder);
+    setReceiptOrder(newOrder);
 
     setToastMessage(
       isGlobalOffline
@@ -371,6 +394,28 @@ export default function SalesPWAView({
         )}
       </div>
 
+      {/* Floating Quick Action Bar for Last Created Order (Print & Zalo) */}
+      {lastSubmittedOrder && !receiptOrder && (
+        <div className="fixed bottom-20 right-4 z-40 animate-in slide-in-from-bottom-3 duration-200 flex items-center gap-2">
+          <button
+            onClick={() => setShowZaloModal(true)}
+            className="flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3.5 py-3 font-bold text-white shadow-xl hover:bg-blue-500 active:scale-95 transition-all cursor-pointer text-xs sm:text-sm"
+            title="Gửi xác nhận đơn hàng qua Zalo"
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span>Gửi Zalo</span>
+          </button>
+          <button
+            onClick={() => setReceiptOrder(lastSubmittedOrder)}
+            className="flex items-center gap-1.5 rounded-2xl bg-slate-900 px-4 py-3 font-bold text-white shadow-xl hover:bg-slate-800 active:scale-95 transition-all cursor-pointer text-xs sm:text-sm"
+            title="In phiếu xuất kho K80"
+          >
+            <Printer className="w-4 h-4" />
+            <span>In Phiếu ({lastSubmittedOrder.id.slice(-6)})</span>
+          </button>
+        </div>
+      )}
+
       {/* Review Drawer Modal (Slide up from bottom / side) */}
       {isReviewDrawerOpen && (
         <PwaOrderReviewDrawer
@@ -385,6 +430,23 @@ export default function SalesPWAView({
           onCollectCashDebt={handleCollectCashDebt}
         />
       )}
+
+      {/* Mobile Thermal / A4 Print Receipt Modal */}
+      <OrderPrintReceipt
+        order={receiptOrder}
+        customer={activeCustomer}
+        isOpen={Boolean(receiptOrder)}
+        onClose={() => setReceiptOrder(null)}
+      />
+
+      {/* 1-Click Zalo Direct Chat Notification Modal */}
+      <ZaloShareModal
+        isOpen={showZaloModal}
+        onClose={() => setShowZaloModal(false)}
+        customer={activeCustomer}
+        order={lastSubmittedOrder}
+        initialTemplate="order"
+      />
     </div>
   );
 }

@@ -46,10 +46,23 @@ function revalidateOrderPaths() {
   revalidatePath("/dashboard");
 }
 
+function getProductLiters(product: { volume?: string | null; isDrum?: boolean }): number {
+  if (product.isDrum) return 200;
+  const vol = String(product.volume || "").toLowerCase();
+  const num = parseFloat(vol.replace(/[^\d.]/g, ""));
+  if (Number.isFinite(num) && num > 0) {
+    return num;
+  }
+  return 1;
+}
+
 export async function createOrder(input: {
   customerId: string;
   items: CreateOrderItemInput[];
   localId?: string | null;
+  discountPercent?: number;
+  discountAmount?: number;
+  promotionNotes?: string | null;
 }): Promise<OrderActionResult> {
   const { dbUser } = await getSessionDbUser();
   if (!dbUser) {
@@ -108,6 +121,7 @@ export async function createOrder(input: {
         throw new Error("Một hoặc nhiều sản phẩm không tồn tại.");
       }
 
+      let totalLiters = 0;
       const lineItems = products.map((product) => {
         const quantity = qtyByProduct.get(product.id) ?? 0;
         if (product.stock < quantity) {
@@ -115,20 +129,30 @@ export async function createOrder(input: {
             `Không đủ tồn kho cho “${product.name}” (còn ${product.stock}).`,
           );
         }
+        const unitLiters = getProductLiters(product);
+        totalLiters += unitLiters * quantity;
         return {
           productId: product.id,
           quantity,
           unitPrice: product.unitPrice,
+          unitLiters,
         };
       });
 
-      const total = orderTotal(lineItems);
+      const rawTotal = orderTotal(lineItems);
+      const discountPercent = Math.max(0, Math.min(100, Number(input.discountPercent || 0)));
+      let discountAmount = Math.max(0, Number(input.discountAmount || 0));
+      if (discountAmount === 0 && discountPercent > 0) {
+        discountAmount = Math.round((rawTotal * discountPercent) / 100);
+      }
+      const finalTotal = Math.max(0, rawTotal - discountAmount);
+
       const currentDebt = Number(customer.currentDebt);
       const creditLimit = Number(customer.creditLimit);
 
-      if (currentDebt + total > creditLimit) {
+      if (currentDebt + finalTotal > creditLimit) {
         throw new Error(
-          `Vượt hạn mức công nợ. Dư nợ ${currentDebt.toLocaleString("vi-VN")} + đơn ${total.toLocaleString("vi-VN")} > hạn mức ${creditLimit.toLocaleString("vi-VN")}.`,
+          `Vượt hạn mức công nợ. Dư nợ ${currentDebt.toLocaleString("vi-VN")} + đơn ${finalTotal.toLocaleString("vi-VN")} > hạn mức ${creditLimit.toLocaleString("vi-VN")}.`,
         );
       }
 
@@ -138,6 +162,10 @@ export async function createOrder(input: {
           userId: dbUser.id,
           customerId,
           localId,
+          discountPercent,
+          discountAmount: new Prisma.Decimal(discountAmount),
+          promotionNotes: input.promotionNotes ? String(input.promotionNotes).trim() : null,
+          totalLiters,
           syncedAt: localId ? new Date() : null,
           items: {
             create: lineItems.map((item) => ({
@@ -152,7 +180,7 @@ export async function createOrder(input: {
       await tx.customer.update({
         where: { id: customerId },
         data: {
-          currentDebt: new Prisma.Decimal(currentDebt + total),
+          currentDebt: new Prisma.Decimal(currentDebt + finalTotal),
         },
       });
 

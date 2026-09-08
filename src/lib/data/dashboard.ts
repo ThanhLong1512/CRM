@@ -1,5 +1,6 @@
 import type { OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { calculateDebtAging } from "@/lib/data/customers";
 
 const REVENUE_STATUSES: OrderStatus[] = ["PENDING", "CONFIRMED", "SHIPPED"];
 const CREDIT_ALERT_RATIO = 0.85;
@@ -41,10 +42,22 @@ export type ViscosityMixPoint = {
   color: string;
 };
 
+export type DebtAgingOverview = {
+  totalDebt: number;
+  current: number;
+  overdue1_15: number;
+  overdue16_30: number;
+  badDebt: number;
+  criticalCount: number;
+  warningCount: number;
+  safeCount: number;
+};
+
 export type DashboardOverview = {
   kpis: DashboardKpis;
   monthlyTrend: MonthlyTrendPoint[];
   viscosityMix: ViscosityMixPoint[];
+  debtAging?: DebtAgingOverview;
   mtdYear: number;
 };
 
@@ -160,11 +173,66 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       }),
       prisma.customer.findMany({
         select: {
+          id: true,
+          name: true,
           currentDebt: true,
           creditLimit: true,
+          creditTermDays: true,
+          orders: {
+            where: { status: { in: REVENUE_STATUSES } },
+            orderBy: { createdAt: "desc" },
+            select: {
+              createdAt: true,
+              discountAmount: true,
+              discountPercent: true,
+              items: { select: { quantity: true, unitPrice: true } },
+            },
+          },
         },
       }),
     ]);
+
+  let totalDebt = 0;
+  let currentAging = 0;
+  let overdue1_15Aging = 0;
+  let overdue16_30Aging = 0;
+  let badDebtAging = 0;
+  let criticalCount = 0;
+  let warningCount = 0;
+  let safeCount = 0;
+
+  for (const c of customers) {
+    const debt = Number(c.currentDebt);
+    totalDebt += debt;
+    const term = c.creditTermDays ?? 30;
+    const orderSummaries = (c.orders || []).map((o) => {
+      const raw = o.items.reduce((s, it) => s + it.quantity * Number(it.unitPrice), 0);
+      const discAmt = Number(o.discountAmount) || 0;
+      const discPct = o.discountPercent || 0;
+      const disc = discAmt > 0 ? discAmt : (discPct > 0 ? (raw * discPct / 100) : 0);
+      return { createdAt: o.createdAt, total: Math.max(0, raw - disc) };
+    });
+
+    const aging = calculateDebtAging(debt, term, orderSummaries);
+    currentAging += aging.current;
+    overdue1_15Aging += aging.overdue1_15;
+    overdue16_30Aging += aging.overdue16_30;
+    badDebtAging += aging.badDebt;
+    if (aging.status === "critical") criticalCount++;
+    else if (aging.status === "warning") warningCount++;
+    else safeCount++;
+  }
+
+  const debtAgingOverview: DebtAgingOverview = {
+    totalDebt,
+    current: currentAging,
+    overdue1_15: overdue1_15Aging,
+    overdue16_30: overdue16_30Aging,
+    badDebt: badDebtAging,
+    criticalCount,
+    warningCount,
+    safeCount,
+  };
 
   const revenueMtd = mtdOrders.reduce(
     (sum, order) => sum + orderRevenue(order.items),
@@ -276,6 +344,7 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
     },
     monthlyTrend,
     viscosityMix,
+    debtAging: debtAgingOverview,
     mtdYear: now.getFullYear(),
   };
 }

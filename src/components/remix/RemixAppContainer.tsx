@@ -11,7 +11,9 @@ import {
   OrderStatus,
   DrumTransaction,
   NavigationModule,
+  CreditOverrideRequest,
 } from "@/types";
+import { soundFX } from "@/components/utils/audio";
 import type { DashboardOverview } from "@/lib/data/dashboard";
 import type { DrumStats } from "@/lib/data/drums";
 import type { RfmOverview } from "@/lib/data/rfm";
@@ -97,6 +99,7 @@ function customerToFormData(input: CustomerFormInput): FormData {
   fd.set("address", input.address);
   fd.set("type", input.type);
   fd.set("creditLimit", String(input.creditLimit));
+  if (input.creditTermDays) fd.set("creditTermDays", String(input.creditTermDays));
   if (input.lat) fd.set("lat", input.lat);
   if (input.lng) fd.set("lng", input.lng);
   return fd;
@@ -171,6 +174,24 @@ export default function RemixAppContainer({
   const [prefilledCustomerId, setPrefilledCustomerId] = useState<
     string | undefined
   >(undefined);
+  const [creditOverrideRequests, setCreditOverrideRequests] = useState<
+    CreditOverrideRequest[]
+  >([
+    {
+      id: "COR-101",
+      customerId: "C02",
+      customerName: "Đội Xe Logistics Demo",
+      requestedBy: "Nguyễn Văn Hùng (Sales)",
+      currentDebt: 94000000,
+      creditLimit: 100000000,
+      overdueDays: 122,
+      reason:
+        "Khách đang cần 2 phuy nhớt thay gấp cho 5 xe container chạy hàng Hải Phòng, cam kết thanh toán 50 triệu vào thứ Sáu.",
+      requestedAmount: 31200000,
+      requestedAt: "08:30 Hôm nay",
+      status: "PENDING",
+    },
+  ]);
 
   useEffect(() => {
     setProducts(initialProducts);
@@ -438,6 +459,9 @@ export default function RemixAppContainer({
       const result = await createOrder({
         customerId: newOrder.customerId,
         localId: newOrder.id.startsWith("local-") ? newOrder.id : null,
+        discountPercent: newOrder.discountPercent,
+        discountAmount: newOrder.discountAmount,
+        promotionNotes: newOrder.promotionNotes,
         items: newOrder.items.map((i) => ({
           productId: i.productId,
           quantity: i.quantity,
@@ -463,6 +487,9 @@ export default function RemixAppContainer({
         const result = await createOrder({
           customerId: order.customerId,
           localId: order.id,
+          discountPercent: order.discountPercent,
+          discountAmount: order.discountAmount,
+          promotionNotes: order.promotionNotes,
           items: order.items.map((i) => ({
             productId: i.productId,
             quantity: i.quantity,
@@ -667,7 +694,6 @@ export default function RemixAppContainer({
       message: result.message,
     };
   };
-
   const handleUpdateStaffRole = (userId: string, role: UserRole) => {
     startTransition(async () => {
       const result = await updateUserRole(userId, role);
@@ -685,6 +711,8 @@ export default function RemixAppContainer({
     customerId: string,
     delivered: number,
     returned: number,
+    signature?: string,
+    signedBy?: string,
   ) => {
     const customer = customers.find((c) => c.id === customerId);
     if (!customer) return;
@@ -708,6 +736,8 @@ export default function RemixAppContainer({
         delivered,
         returned,
         balanceAfter: newBalance,
+        signature,
+        signedBy,
         timestamp:
           new Date().toLocaleDateString("vi-VN") +
           " " +
@@ -721,7 +751,11 @@ export default function RemixAppContainer({
 
     startTransition(async () => {
       if (delivered > 0) {
-        const result = await issueDrums({ customerId, quantity: delivered });
+        const result = await issueDrums({
+          customerId,
+          quantity: delivered,
+          notes: signedBy ? `e-PoD ký bởi: ${signedBy}` : undefined,
+        });
         if (!result.success) {
           toast.error(result.error ?? result.message);
           router.refresh();
@@ -729,7 +763,11 @@ export default function RemixAppContainer({
         }
       }
       if (returned > 0) {
-        const result = await returnDrums({ customerId, quantity: returned });
+        const result = await returnDrums({
+          customerId,
+          quantity: returned,
+          notes: signedBy ? `e-PoD ký bởi: ${signedBy}` : undefined,
+        });
         if (!result.success) {
           toast.error(result.error ?? result.message);
           router.refresh();
@@ -751,6 +789,168 @@ export default function RemixAppContainer({
       toast.success("Đã cập nhật sổ phuy.");
       router.refresh();
     });
+  };
+
+  const handleSignDrumTransaction = (
+    transactionId: string,
+    signature: string,
+    signedBy: string,
+  ) => {
+    setDrumTransactions((prev) =>
+      prev.map((t) =>
+        t.id === transactionId ? { ...t, signature, signedBy } : t,
+      ),
+    );
+  };
+
+  const handleRequestCreditOverride = (
+    customerId: string,
+    reason: string,
+    requestedAmount: number,
+  ) => {
+    const cust = customers.find((c) => c.id === customerId);
+    if (!cust) return;
+
+    const newReq: CreditOverrideRequest = {
+      id: `COR-${Date.now().toString().slice(-4)}`,
+      customerId,
+      customerName: cust.name,
+      requestedBy: resolvedSessionUser.name,
+      currentDebt: cust.currentDebt,
+      creditLimit: cust.creditLimit,
+      overdueDays: cust.debtAging?.maxOverdueDays || 122,
+      reason,
+      requestedAmount,
+      requestedAt: new Date().toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      status: "PENDING",
+    };
+
+    setCreditOverrideRequests((prev) => [
+      newReq,
+      ...prev.filter((r) => r.customerId !== customerId),
+    ]);
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              creditOverrideReason: reason,
+              creditOverrideRequestedAt: new Date().toLocaleTimeString(
+                "vi-VN",
+                { hour: "2-digit", minute: "2-digit" },
+              ),
+            }
+          : c,
+      ),
+    );
+    toast.success(
+      "Đã gửi yêu cầu phê duyệt vượt trần tới Ban Giám Đốc (ADMIN)!",
+    );
+  };
+
+  const handleApproveCreditOverride = (customerId: string) => {
+    setCreditOverrideRequests((prev) =>
+      prev.map((r) =>
+        r.customerId === customerId
+          ? { ...r, status: "APPROVED", reviewedBy: resolvedSessionUser.name }
+          : r,
+      ),
+    );
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              creditOverridden: true,
+              creditOverrideApprovedBy: resolvedSessionUser.name,
+            }
+          : c,
+      ),
+    );
+    soundFX.playSuccess();
+    toast.success(
+      "Ban Giám Đốc đã phê duyệt vượt trần công nợ. Khách hàng đã mở khóa lên đơn!",
+    );
+  };
+
+  const handleRejectCreditOverride = (
+    customerId: string,
+    rejectReason?: string,
+  ) => {
+    setCreditOverrideRequests((prev) =>
+      prev.map((r) =>
+        r.customerId === customerId
+          ? { ...r, status: "REJECTED", rejectReason }
+          : r,
+      ),
+    );
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? { ...c, creditOverridden: false, creditOverrideReason: undefined }
+          : c,
+      ),
+    );
+    toast.error(
+      "Đã từ chối cấp nợ vượt trần. Yêu cầu Sales thu hồi nợ cũ trước!",
+    );
+  };
+
+  const handleCreateEmergencyFleetOrder = (vehicle: FleetVehicle) => {
+    const cust = customers.find((c) => c.id === vehicle.customerId);
+    const matchedProduct =
+      products.find(
+        (p) => p.packageType === "Phuy 200L" || p.sku.includes("15W40"),
+      ) || products[0];
+
+    const remainingKm = vehicle.currentKm - vehicle.nextOilChangeKm;
+    const emergencyOrder: Order = {
+      id: `DH-EMG-${Date.now().toString().slice(-4)}`,
+      customerId: vehicle.customerId,
+      customer: cust?.name || vehicle.customerName || "Đội xe",
+      createdAt: new Date().toISOString(),
+      status: "Chờ duyệt",
+      discountPercent: 0,
+      discountAmount: 0,
+      totalLiters: 200,
+      items: matchedProduct
+        ? [
+            {
+              productId: matchedProduct.id,
+              productName: matchedProduct.name,
+              sku: matchedProduct.sku,
+              quantity: 1,
+              unitPrice:
+                matchedProduct.priceFleet ||
+                matchedProduct.priceDealer ||
+                15600000,
+              total:
+                matchedProduct.priceFleet ||
+                matchedProduct.priceDealer ||
+                15600000,
+            },
+          ]
+        : [],
+      total:
+        matchedProduct?.priceFleet ||
+        matchedProduct?.priceDealer ||
+        15600000,
+      drumExchange: {
+        delivered: 1,
+        returned: 1,
+      },
+      promotionNotes: `🚨 [ĐƠN GẤP ODOMETER] Xe ${vehicle.plate} (${vehicle.vehicleType}) quá hạn thay nhớt ${Math.abs(remainingKm)} KM. Tự động phát sinh từ Odometer 0%.`,
+    };
+
+    handleSubmitOrder(emergencyOrder, false);
+    soundFX.playSuccess();
+    toast.success(
+      `🚨 Đã tự động tạo Đơn Hàng Khẩn Cấp #${emergencyOrder.id} cho xe ${vehicle.plate} và chuyển vào cột Chờ Duyệt!`,
+    );
+    handleSelectModule("kanban");
   };
 
   const pendingOrdersCount = orders.filter(
@@ -778,7 +978,7 @@ export default function RemixAppContainer({
         onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-hidden">
         <Header
           currentModuleName={moduleTitles[currentModule]}
           sessionUser={resolvedSessionUser}
@@ -789,16 +989,16 @@ export default function RemixAppContainer({
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         />
 
-        <main className="w-full flex-1 overflow-y-auto p-3 sm:p-5 md:p-6">
-          <div className="w-full">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto max-w-7xl">
             {currentModule === "dashboard" && (
               <DashboardView
-                orders={orders}
-                customers={customers}
-                products={products}
-                vehicles={vehicles}
                 overview={dashboard}
                 drumStats={drumStats}
+                customers={customers}
+                orders={orders}
+                vehicles={vehicles}
+                products={products}
                 onNavigate={(mod) => {
                   if (mod === "sales-pwa" || mod === "sales_pwa")
                     handleNavigateToSales();
@@ -829,6 +1029,12 @@ export default function RemixAppContainer({
                 onCreateCustomer={handleCreateCustomer}
                 onUpdateCustomer={handleUpdateCustomerProfile}
                 onDeleteCustomer={handleDeleteCustomer}
+                onPayDebt={handlePayDebt}
+                sessionUser={resolvedSessionUser}
+                creditOverrideRequests={creditOverrideRequests}
+                onRequestCreditOverride={handleRequestCreditOverride}
+                onApproveCreditOverride={handleApproveCreditOverride}
+                onRejectCreditOverride={handleRejectCreditOverride}
               />
             )}
 
@@ -848,6 +1054,7 @@ export default function RemixAppContainer({
                 onUpdateVehicleKm={handleUpdateVehicleKm}
                 onAddVehicle={handleAddVehicle}
                 onDeleteVehicle={handleDeleteVehicle}
+                onAutoCreateEmergencyOrder={handleCreateEmergencyFleetOrder}
               />
             )}
 
@@ -882,6 +1089,7 @@ export default function RemixAppContainer({
                 customers={customers}
                 drumTransactions={drumTransactions}
                 onUpdateDrumBalance={handleUpdateDrumBalance}
+                onSignTransaction={handleSignDrumTransaction}
               />
             )}
 

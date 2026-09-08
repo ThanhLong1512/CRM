@@ -24,6 +24,11 @@ export type OrderDto = {
   userName: string | null;
   userEmail: string;
   total: number;
+  rawTotal?: number;
+  discountPercent?: number;
+  discountAmount?: number;
+  promotionNotes?: string | null;
+  totalLiters?: number;
   itemCount: number;
   items: OrderItemDto[];
   createdAt: string;

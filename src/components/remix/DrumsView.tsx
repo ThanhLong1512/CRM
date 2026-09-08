@@ -1,5 +1,5 @@
-﻿"use client";
-import { useState, useRef, FormEvent, MouseEvent, TouchEvent } from 'react';
+"use client";
+import { useState, useRef, useEffect, FormEvent, MouseEvent, TouchEvent } from 'react';
 import { Customer, DrumTransaction } from '../types';
 import { formatVND } from '../mockData';
 import { soundFX } from '../utils/audio';
@@ -26,15 +26,24 @@ interface DrumsViewProps {
   onUpdateDrumBalance: (
     customerId: string,
     delivered: number,
-    returned: number
+    returned: number,
+    signature?: string,
+    signedBy?: string
+  ) => void;
+  onSignTransaction?: (
+    transactionId: string,
+    signature: string,
+    signedBy: string
   ) => void;
 }
 
 export default function DrumsView({
   customers,
-  drumTransactions,
+  drumTransactions: initialDrumTransactions,
   onUpdateDrumBalance,
+  onSignTransaction,
 }: DrumsViewProps) {
+  const [localTransactions, setLocalTransactions] = useState<DrumTransaction[]>(initialDrumTransactions);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(
     customers[0]?.id || ''
   );
@@ -42,9 +51,18 @@ export default function DrumsView({
   const [returnedCount, setReturnedCount] = useState<number | ''>('');
   const [message, setMessage] = useState<string>('');
 
+  // Keep local transactions in sync with prop updates
+  useEffect(() => {
+    setLocalTransactions(initialDrumTransactions);
+  }, [initialDrumTransactions]);
+
   // Digital Signature Modal State
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [signedName, setSignedName] = useState('Trần Minh Đức (Chủ Garage)');
+  const [targetTxForSignature, setTargetTxForSignature] = useState<DrumTransaction | null>(null);
+  const [viewingProofTx, setViewingProofTx] = useState<DrumTransaction | null>(null);
+  const [formSignature, setFormSignature] = useState<{ signature: string; signedBy: string } | null>(null);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hasSignature, setHasSignature] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -77,14 +95,23 @@ export default function DrumsView({
       return;
     }
 
-    onUpdateDrumBalance(activeCustomer.id, delivered, returned);
+    onUpdateDrumBalance(
+      activeCustomer.id,
+      delivered,
+      returned,
+      formSignature?.signature,
+      formSignature?.signedBy
+    );
     soundFX.playSuccess();
     setMessage(
-      `Đã cập nhật vỏ phuy 200L cho ${activeCustomer.name}: Giao +${delivered}, Thu -${returned}.`
+      `Đã cập nhật vỏ phuy 200L cho ${activeCustomer.name}: Giao +${delivered}, Thu -${returned}${
+        formSignature ? ' (Kèm chữ ký e-PoD thực địa)' : ''
+      }.`
     );
 
     setDeliveredCount('');
     setReturnedCount('');
+    setFormSignature(null);
   };
 
   // Canvas Drawing Handlers
@@ -315,6 +342,55 @@ export default function DrumsView({
               </div>
             )}
 
+            {/* e-PoD Digital Signature trigger on form */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <PenTool className="w-3.5 h-3.5 text-cyan-700" />
+                  <span>Ký nhận điện tử thực địa (Driver e-PoD)</span>
+                </span>
+                {formSignature ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetTxForSignature(null);
+                      clearCanvas();
+                      setShowSignatureModal(true);
+                    }}
+                    className="text-[11px] text-cyan-700 hover:underline font-semibold"
+                  >
+                    Ký lại
+                  </button>
+                ) : null}
+              </div>
+
+              {formSignature ? (
+                <div className="flex items-center gap-2.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <div className="h-10 w-28 bg-white border border-emerald-300 rounded overflow-hidden flex items-center justify-center p-0.5 shrink-0 shadow-2xs">
+                    <img src={formSignature.signature} alt="Chữ ký" className="max-h-full max-w-full object-contain" />
+                  </div>
+                  <div className="text-[11px] min-w-0 flex-1">
+                    <p className="font-bold text-emerald-900 truncate">✓ Đã ký: {formSignature.signedBy}</p>
+                    <p className="text-[10px] text-emerald-700 font-medium">Bằng chứng pháp lý e-PoD hợp lệ</p>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetTxForSignature(null);
+                    setSignedName(activeCustomer ? `${activeCustomer.name} (Chủ Garage)` : 'Trần Minh Đức (Chủ Garage)');
+                    clearCanvas();
+                    setShowSignatureModal(true);
+                  }}
+                  className="w-full py-2 px-3 border border-dashed border-cyan-400 bg-cyan-50/50 hover:bg-cyan-50 rounded-lg text-xs font-bold text-cyan-800 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <PenTool className="w-3.5 h-3.5 text-cyan-700" />
+                  <span>Ký nhận bàn giao vỏ tại chỗ (Touch Pad)</span>
+                </button>
+              )}
+            </div>
+
             {message && (
               <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -341,7 +417,7 @@ export default function DrumsView({
                   <span>Lịch Sử Luân Chuyển Vỏ Phuy Sắt 200L</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Nhật ký chi tiết các lượt giao nhận và chữ ký người bàn giao
+                  Nhật ký chi tiết các lượt giao nhận và chữ ký xác thực e-PoD
                 </p>
               </div>
             </div>
@@ -356,11 +432,11 @@ export default function DrumsView({
                     <th className="py-2.5 px-3 text-cyan-800">Giao (+)</th>
                     <th className="py-2.5 px-3 text-emerald-800">Thu (-)</th>
                     <th className="py-2.5 px-3">Tồn Vỏ Sau GD</th>
-                    <th className="py-2.5 px-3">Người Nhận / Ký</th>
+                    <th className="py-2.5 px-3">Ký Nhận Điện Tử (e-PoD)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {drumTransactions.map((tx) => (
+                  {localTransactions.map((tx) => (
                     <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.id}</td>
                       <td className="py-3 px-3 font-semibold text-slate-900">{tx.customerName}</td>
@@ -374,11 +450,47 @@ export default function DrumsView({
                         {tx.balanceAfter} vỏ
                       </td>
                       <td className="py-3 px-3 text-slate-500">
-                        <div className="flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>{tx.signedBy || 'Ký nhận điện tử'}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">{tx.timestamp}</div>
+                        {tx.signature ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span className="font-bold text-emerald-900 truncate max-w-[130px]">
+                                {tx.signedBy || 'Đã ký e-PoD'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-slate-400 font-mono">{tx.timestamp}</span>
+                              <button
+                                type="button"
+                                onClick={() => setViewingProofTx(tx)}
+                                className="text-[10px] font-bold text-cyan-700 hover:text-cyan-900 hover:underline cursor-pointer"
+                              >
+                                Xem e-PoD
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetTxForSignature(tx);
+                                setSignedName(
+                                  tx.customerName
+                                    ? `${tx.customerName} (Chủ Garage)`
+                                    : 'Chủ Garage / Người nhận'
+                                );
+                                clearCanvas();
+                                setShowSignatureModal(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-cyan-800 text-[11px] font-bold transition shadow-2xs cursor-pointer"
+                            >
+                              <PenTool className="w-3 h-3 text-cyan-700" />
+                              <span>Ký nhận e-PoD</span>
+                            </button>
+                            <div className="text-[10px] text-slate-400 font-mono">{tx.timestamp}</div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -397,24 +509,38 @@ export default function DrumsView({
               <div>
                 <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
                   <PenTool className="w-4 h-4 text-cyan-600" />
-                  <span>Biên Bản Bàn Giao &amp; Ký Nhận Vỏ Phuy</span>
+                  <span>
+                    {targetTxForSignature
+                      ? `Ký e-PoD Cho Giao Dịch #${targetTxForSignature.id}`
+                      : 'Biên Bản Bàn Giao & Ký Nhận Vỏ Phuy'}
+                  </span>
                 </h4>
-                <p className="text-xs text-slate-500">Xác thực điện tử tại hiện trường giao hàng</p>
+                <p className="text-xs text-slate-500">
+                  {targetTxForSignature
+                    ? `Xác thực điện tử cho khách: ${targetTxForSignature.customerName}`
+                    : 'Xác thực điện tử tại hiện trường giao hàng'}
+                </p>
               </div>
-              <button onClick={() => setShowSignatureModal(false)} className="text-slate-400">
+              <button
+                onClick={() => {
+                  setShowSignatureModal(false);
+                  setTargetTxForSignature(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Họ và tên người nhận hàng:
+                Họ và tên người nhận hàng / ký bàn giao:
               </label>
               <input
                 type="text"
                 value={signedName}
                 onChange={(e) => setSignedName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-900"
               />
             </div>
 
@@ -422,8 +548,9 @@ export default function DrumsView({
               <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1">
                 <span>Chữ ký số cảm ứng (Vẽ trực tiếp bằng tay/chuột):</span>
                 <button
+                  type="button"
                   onClick={clearCanvas}
-                  className="text-xs text-cyan-700 hover:underline font-semibold"
+                  className="text-xs text-cyan-700 hover:underline font-semibold cursor-pointer"
                 >
                   Vẽ lại
                 </button>
@@ -454,19 +581,142 @@ export default function DrumsView({
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <button
-                onClick={() => setShowSignatureModal(false)}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                type="button"
+                onClick={() => {
+                  setShowSignatureModal(false);
+                  setTargetTxForSignature(null);
+                }}
+                className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 Đóng
               </button>
               <button
+                type="button"
                 onClick={() => {
+                  const canvas = canvasRef.current;
+                  const signatureDataUrl = canvas && hasSignature ? canvas.toDataURL('image/png') : '';
+                  if (targetTxForSignature) {
+                    setLocalTransactions((prev) =>
+                      prev.map((t) =>
+                        t.id === targetTxForSignature.id
+                          ? { ...t, signature: signatureDataUrl, signedBy: signedName }
+                          : t
+                      )
+                    );
+                    if (onSignTransaction) {
+                      onSignTransaction(targetTxForSignature.id, signatureDataUrl, signedName);
+                    }
+                    setTargetTxForSignature(null);
+                  } else {
+                    setFormSignature({
+                      signature: signatureDataUrl,
+                      signedBy: signedName,
+                    });
+                  }
                   soundFX.playSuccess();
                   setShowSignatureModal(false);
                 }}
-                className="px-5 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-bold shadow-xs"
+                className="px-5 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-bold shadow-xs cursor-pointer"
               >
-                Lưu Chữ Ký Vào Biên Bản
+                Lưu Chữ Ký Vào Biên Bản e-PoD
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Viewing Electronic Proof of Delivery (e-PoD) Modal */}
+      {viewingProofTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider mb-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-700" />
+                  <span>Chứng Từ Bàn Giao Hợp Pháp (e-PoD)</span>
+                </div>
+                <h4 className="font-bold text-slate-900 text-base">
+                  Biên Bản Giao Nhận &amp; Đối Soát Vỏ Phuy
+                </h4>
+                <p className="text-xs text-slate-500 font-mono">
+                  Mã chứng từ: #{viewingProofTx.id} · Thời gian: {viewingProofTx.timestamp}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingProofTx(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+              <div className="flex justify-between border-b border-slate-200/60 pb-2">
+                <span className="text-slate-500">Khách hàng / Garage:</span>
+                <span className="font-bold text-slate-900">{viewingProofTx.customerName}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200/60 pb-2">
+                <span className="text-slate-500">Số lượng phuy mới giao:</span>
+                <span className="font-bold font-mono text-cyan-800">
+                  {viewingProofTx.delivered > 0 ? `+${viewingProofTx.delivered} phuy 200L` : '0 phuy'}
+                </span>
+              </div>
+              <div className="flex justify-between border-b border-slate-200/60 pb-2">
+                <span className="text-slate-500">Số lượng vỏ rỗng thu hồi:</span>
+                <span className="font-bold font-mono text-emerald-800">
+                  {viewingProofTx.returned > 0 ? `-${viewingProofTx.returned} vỏ rỗng` : '0 vỏ'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-700 font-bold">Số vỏ khách lưu giữ sau bàn giao:</span>
+                <span className="font-mono font-extrabold text-sm text-slate-900">
+                  {viewingProofTx.balanceAfter} vỏ
+                </span>
+              </div>
+            </div>
+
+            {/* Signature Proof Card */}
+            <div className="p-4 bg-white border-2 border-emerald-300 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800">Chữ ký điện tử người nhận hàng:</span>
+                <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Xác thực hiện trường</span>
+                </span>
+              </div>
+              <div className="h-28 w-full bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center p-2">
+                {viewingProofTx.signature ? (
+                  <img
+                    src={viewingProofTx.signature}
+                    alt="Chữ ký e-PoD"
+                    className="max-h-full max-w-full object-contain"
+                  />
+                ) : (
+                  <span className="text-xs text-slate-400 italic">Chưa có chữ ký số</span>
+                )}
+              </div>
+              <div className="text-center pt-1">
+                <p className="text-xs font-bold text-slate-900">{viewingProofTx.signedBy || 'Người nhận'}</p>
+                <p className="text-[10px] text-slate-400 font-mono">{viewingProofTx.timestamp}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>In Chứng Từ e-PoD</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewingProofTx(null)}
+                className="px-5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+              >
+                Đóng
               </button>
             </div>
           </div>

@@ -49,6 +49,11 @@ enum DrumTxnType {
   ADJUST
 }
 
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+}
+
 model User {
   id               String            @id @default(cuid())
   email            String            @unique
@@ -59,6 +64,7 @@ model User {
   orders           Order[]
   checkIns         VisitCheckIn[]
   drumTransactions DrumTransaction[]
+  debtPayments     DebtPayment[]
 }
 
 model Product {
@@ -86,6 +92,10 @@ model Order {
   user             User              @relation(fields: [userId], references: [id])
   customerId       String
   customer         Customer          @relation(fields: [customerId], references: [id])
+  discountPercent  Float             @default(0)
+  discountAmount   Decimal           @default(0) @db.Decimal(14, 2)
+  promotionNotes   String?
+  totalLiters      Float             @default(0)
   syncedAt         DateTime?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -110,6 +120,7 @@ model Customer {
   address          String?
   type             CustomerType      @default(GARAGE)
   creditLimit      Decimal           @default(0) @db.Decimal(14, 2)
+  creditTermDays   Int               @default(30)
   currentDebt      Decimal           @default(0) @db.Decimal(14, 2)
   outstandingDrums Int               @default(0)
   lat              Decimal?          @db.Decimal(10, 7)
@@ -120,6 +131,20 @@ model Customer {
   checkIns         VisitCheckIn[]
   vehicles         FleetVehicle[]
   drumTransactions DrumTransaction[]
+  debtPayments     DebtPayment[]
+}
+
+model DebtPayment {
+  id            String        @id @default(cuid())
+  receiptNumber String        @unique
+  customerId    String
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  amount        Decimal       @db.Decimal(14, 2)
+  method        PaymentMethod @default(CASH)
+  notes         String?
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  createdAt     DateTime      @default(now())
 }
 
 model DrumTransaction {

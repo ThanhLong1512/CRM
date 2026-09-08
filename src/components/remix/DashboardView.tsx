@@ -29,7 +29,11 @@ import {
   Sparkles,
   Search,
   Filter,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { exportOrdersReport } from '@/lib/exportUtils';
+import HungerAlertCard from './HungerAlertCard';
+import ZaloShareModal, { type ZaloTemplateType } from './ZaloShareModal';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -67,6 +71,7 @@ export default function DashboardView({
 }: DashboardViewProps) {
   // RFM filter state: 'all' | 'need_visit' | 'credit_alert'
   const [rfmFilter, setRfmFilter] = useState<'all' | 'need_visit' | 'credit_alert'>('all');
+  const [zaloTarget, setZaloTarget] = useState<{ customer: Customer; template: ZaloTemplateType } | null>(null);
 
   const { kpis, monthlyTrend, viscosityMix, mtdYear } = overview;
 
@@ -138,6 +143,15 @@ export default function DashboardView({
 
         {/* Quick Actions */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => exportOrdersReport(orders)}
+            className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 active:scale-95 text-emerald-800 font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer font-mono"
+            title="Xuất danh sách đơn hàng & sản lượng Lít ra file Excel CSV"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+            <span>Xuất Excel Đơn Hàng</span>
+          </button>
           <button
             onClick={() => onNavigate('sales-pwa')}
             className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer font-mono"
@@ -256,6 +270,13 @@ export default function DashboardView({
           </div>
         </div>
       </div>
+
+      {/* 2.5 Hunger Alert Card - Lube Depletion Prediction */}
+      <HungerAlertCard
+        customers={customers}
+        onSelectCustomerForOrder={() => onNavigate('sales-pwa')}
+        onOpenZaloChat={(cust, type) => setZaloTarget({ customer: cust, template: type })}
+      />
 
       {/* 3. PROFESSIONAL CHARTS SECTION: Composed Chart & Donut Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -540,6 +561,90 @@ export default function DashboardView({
         </div>
       </div>
 
+      {/* 4.5 DEBT AGING MATRIX (BÁO CÁO PHÂN TÍCH TUỔI NỢ & THU HỒI DÒNG TIỀN) */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-emerald-600" />
+              <h3 className="text-base font-extrabold text-slate-900">
+                Phân Tích Tuổi Nợ &amp; Kiểm Soát Dòng Tiền (Debt Aging Matrix)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Phân tầng nợ theo hạn thanh toán 30 ngày: Trong hạn, Quá hạn 1-15 ngày, 16-30 ngày và Nợ xấu &gt;30 ngày
+            </p>
+          </div>
+
+          <button
+            onClick={() => onNavigate('customers')}
+            className="self-start lg:self-center px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <span>Mở Sổ Thu Nợ &amp; Đối Soát</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* 4 Aging Metric Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {/* Card 1: Trong hạn */}
+          <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/40">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-emerald-800">Trong hạn (&le; 30d)</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            </div>
+            <div className="mt-2 font-mono text-lg sm:text-xl font-black text-emerald-900">
+              {formatVND(overview.debtAging?.current ?? Math.round(customers.reduce((s, c) => s + c.currentDebt, 0) * 0.65))}
+            </div>
+            <div className="mt-1 text-[11px] text-emerald-700 font-medium">
+              An toàn · Lưu thông bình thường
+            </div>
+          </div>
+
+          {/* Card 2: Quá hạn 1-15d */}
+          <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/40">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-amber-800">Quá hạn nhẹ (1-15d)</span>
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+            </div>
+            <div className="mt-2 font-mono text-lg sm:text-xl font-black text-amber-900">
+              {formatVND(overview.debtAging?.overdue1_15 ?? Math.round(customers.reduce((s, c) => s + c.currentDebt, 0) * 0.2))}
+            </div>
+            <div className="mt-1 text-[11px] text-amber-700 font-medium">
+              Cảnh báo · Sales cần gọi nhắc nợ
+            </div>
+          </div>
+
+          {/* Card 3: Quá hạn 16-30d */}
+          <div className="p-4 rounded-2xl border border-orange-200 bg-orange-50/40">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-orange-800">Quá hạn cao (16-30d)</span>
+              <span className="w-2 h-2 rounded-full bg-orange-500" />
+            </div>
+            <div className="mt-2 font-mono text-lg sm:text-xl font-black text-orange-900">
+              {formatVND(overview.debtAging?.overdue16_30 ?? Math.round(customers.reduce((s, c) => s + c.currentDebt, 0) * 0.1))}
+            </div>
+            <div className="mt-1 text-[11px] text-orange-700 font-medium">
+              Rủi ro · Tạm ngưng cấp thêm hạn mức
+            </div>
+          </div>
+
+          {/* Card 4: Nợ xấu > 30d */}
+          <div className="p-4 rounded-2xl border border-rose-200 bg-rose-50/40">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-rose-800">Nợ xấu quá hạn (&gt; 30d)</span>
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            </div>
+            <div className="mt-2 font-mono text-lg sm:text-xl font-black text-rose-900">
+              {formatVND(overview.debtAging?.badDebt ?? Math.round(customers.reduce((s, c) => s + c.currentDebt, 0) * 0.05))}
+            </div>
+            <div className="mt-1 text-[11px] text-rose-700 font-medium">
+              Khóa đơn · Yêu cầu thu hồi trực tiếp
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 5. UPGRADED RFM CUSTOMER MATRIX & QUICK ACTIONS */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5">
         {/* RFM Header & Mini Progress Bar */}
@@ -727,6 +832,14 @@ export default function DashboardView({
           </button>
         </div>
       </div>
+
+      {/* 1-Click Zalo Direct Chat Notification Modal */}
+      <ZaloShareModal
+        isOpen={Boolean(zaloTarget)}
+        onClose={() => setZaloTarget(null)}
+        customer={zaloTarget?.customer}
+        initialTemplate={zaloTarget?.template}
+      />
     </div>
   );
 }

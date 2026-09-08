@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useState, useRef, useEffect, useMemo, type MouseEvent, type TouchEvent } from 'react';
 import { Customer, Product, Order } from '../../types';
 import { formatVND } from '../../mockData';
@@ -33,11 +33,16 @@ interface PwaOrderReviewDrawerProps {
     customer: Customer;
     items: { product: Product; quantity: number; unitPrice: number; subtotal: number }[];
     totalAmount: number;
+    discountPercent?: number;
+    discountAmount?: number;
+    promotionNotes?: string;
+    totalLiters?: number;
     drumDelivered: number;
     drumReturned: number;
     drumDepositAmount: number;
     signatureBase64?: string;
     isEmergencyApproved: boolean;
+    cashCollected?: number;
   }) => void;
   onCollectCashDebt: (customerId: string, amount: number) => void;
 }
@@ -57,6 +62,10 @@ export default function PwaOrderReviewDrawer({
   const [cashCollected, setCashCollected] = useState<number>(0);
   const [showCashCollectModal, setShowCashCollectModal] = useState<boolean>(false);
   const [cashInputVal, setCashInputVal] = useState<string>('5000000');
+
+  // Trade Discount and Promo state
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [promotionNotes, setPromotionNotes] = useState<string>('');
 
   // Emergency manager approval state
   const [isEmergencyApproved, setIsEmergencyApproved] = useState<boolean>(false);
@@ -94,6 +103,15 @@ export default function PwaOrderReviewDrawer({
       });
   }, [cart, products, activeCustomer]);
 
+  // Volume / Liter calculation helper
+  const getVolLiters = (p: Product) => {
+    if (p.packageType === 'Phuy 200L') return 200;
+    if (p.packageType === 'Thùng 18L') return 18;
+    if (p.packageType === 'Xô 4L') return 4;
+    return 1;
+  };
+  const totalLiters = cartItems.reduce((sum, item) => sum + item.quantity * getVolLiters(item.product), 0);
+
   // Auto detect if drum packaging is in order to set initial delivered drums
   useEffect(() => {
     let drumCount = 0;
@@ -105,11 +123,14 @@ export default function PwaOrderReviewDrawer({
     setDrumDelivered(drumCount);
   }, [cartItems]);
 
-  // Financial calculations
+  // Financial calculations with discount
   const rawOrderTotal = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const discountAmount = Math.round((rawOrderTotal * discountPercent) / 100);
+  const netGoodsTotal = Math.max(0, rawOrderTotal - discountAmount);
   const netDrumChange = drumDelivered - drumReturned;
-  const drumDepositTotal = Math.max(0, netDrumChange * DRUM_DEPOSIT_UNIT_PRICE);
-  const newOrderTotal = rawOrderTotal + drumDepositTotal;
+  const drumDepositTotal = netDrumChange * DRUM_DEPOSIT_UNIT_PRICE;
+  // Net payable = Oil total + Drum deposit change (if returned > delivered, deduct directly from oil total)
+  const newOrderTotal = Math.max(0, netGoodsTotal + drumDepositTotal);
 
   // Effective outstanding debt after cash collected at spot
   const effectiveCurrentDebt = Math.max(0, activeCustomer.currentDebt - cashCollected);
@@ -200,11 +221,16 @@ export default function PwaOrderReviewDrawer({
       customer: activeCustomer,
       items: cartItems,
       totalAmount: newOrderTotal,
+      discountPercent,
+      discountAmount,
+      promotionNotes: promotionNotes.trim() || undefined,
+      totalLiters,
       drumDelivered,
       drumReturned,
       drumDepositAmount: drumDepositTotal,
       signatureBase64,
       isEmergencyApproved,
+      cashCollected,
     });
   };
 
@@ -386,6 +412,76 @@ export default function PwaOrderReviewDrawer({
                 </div>
               </div>
             </div>
+
+            {netDrumChange !== 0 && (
+              <div className="mt-2.5 p-2 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-600 font-semibold">
+                  {netDrumChange < 0
+                    ? `Hoàn cọc ${Math.abs(netDrumChange)} vỏ cũ (Trừ tiền dầu):`
+                    : `Cọc thêm ${netDrumChange} phuy mới:`}
+                </span>
+                <span className={`font-bold ${netDrumChange < 0 ? 'text-emerald-700' : 'text-sky-800'}`}>
+                  {netDrumChange < 0
+                    ? `-${formatVND(Math.abs(drumDepositTotal))}`
+                    : `+${formatVND(drumDepositTotal)}`}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Section: Trade Discount & Promotions */}
+          <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-black text-amber-950 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-600" />
+                <span>Chiết Khấu &amp; Quà Tặng Khuyến Mãi</span>
+              </div>
+              <span className="text-xs font-mono font-bold text-amber-800 bg-amber-200/80 px-2.5 py-0.5 rounded-full">
+                Sản lượng: {totalLiters} Lít
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Chiết khấu (%)
+                </label>
+                <div className="flex items-center gap-1.5">
+                  {[0, 3, 5, 8].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setDiscountPercent(pct)}
+                      className={`px-2 py-1 rounded-lg text-xs font-bold font-mono cursor-pointer transition ${
+                        discountPercent === pct
+                          ? 'bg-amber-500 text-slate-950 shadow-xs font-black'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:bg-amber-100/50'
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+                {discountAmount > 0 && (
+                  <div className="mt-1 text-[11px] font-mono font-bold text-emerald-700">
+                    Giảm: -{formatVND(discountAmount)}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Quà tặng / Khuyến mại kèm
+                </label>
+                <input
+                  type="text"
+                  value={promotionNotes}
+                  onChange={(e) => setPromotionNotes(e.target.value)}
+                  placeholder="VD: Tặng 1 áo mưa Castrol"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-amber-500 font-medium"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Section 3: Credit Guard Real-time Verification */}
@@ -543,9 +639,29 @@ export default function PwaOrderReviewDrawer({
 
         {/* Drawer Sticky Footer: Submit Action */}
         <div className="p-4 sm:p-5 bg-slate-900 border-t border-slate-800 shrink-0 space-y-3">
-          <div className="flex items-center justify-between text-xs sm:text-sm text-slate-300 font-mono">
-            <span>Tổng cộng thanh toán:</span>
-            <span className="text-xl sm:text-2xl lg:text-3xl font-black text-amber-400 font-mono">{formatVND(newOrderTotal)}</span>
+          <div className="space-y-1 font-mono">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>Tiền hàng (dầu nhớt):</span>
+              <span className="font-semibold text-slate-300">{formatVND(netGoodsTotal)}</span>
+            </div>
+            {drumDepositTotal !== 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className={drumDepositTotal < 0 ? 'text-emerald-400 font-bold' : 'text-sky-300 font-bold'}>
+                  {drumDepositTotal < 0 ? 'Trừ tiền cọc vỏ cũ thu về:' : 'Cọc thêm phuy mới:'}
+                </span>
+                <span className={`font-bold ${drumDepositTotal < 0 ? 'text-emerald-400' : 'text-sky-300'}`}>
+                  {drumDepositTotal < 0
+                    ? `-${formatVND(Math.abs(drumDepositTotal))}`
+                    : `+${formatVND(drumDepositTotal)}`}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs sm:text-sm text-slate-200 pt-1.5 border-t border-slate-800">
+              <span className="font-bold text-white">Số tiền phải thu (Thực tế):</span>
+              <span className="text-xl sm:text-2xl lg:text-3xl font-black text-amber-400 font-mono">
+                {formatVND(newOrderTotal)}
+              </span>
+            </div>
           </div>
 
           <button

@@ -26,6 +26,34 @@ export interface Product {
   isForSale?: boolean;
 }
 
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER';
+
+export interface DebtPayment {
+  id: string;
+  receiptNumber: string;
+  customerId: string;
+  customerName?: string;
+  amount: number;
+  method: PaymentMethod;
+  notes?: string | null;
+  userId: string;
+  userName?: string;
+  createdAt: string;
+}
+
+export type DebtAgingStatus = 'safe' | 'warning' | 'critical';
+
+export interface DebtAging {
+  current: number;
+  overdue1_15: number;
+  overdue16_30: number;
+  badDebt: number;
+  maxOverdueDays: number;
+  status: DebtAgingStatus;
+}
+
+export type VisitDayOfWeek = 'T2' | 'T3' | 'T4' | 'T5' | 'T6' | 'T7';
+
 export interface Customer {
   id: string;
   name: string;
@@ -37,8 +65,12 @@ export interface Customer {
   lng: number;
   hasGps: boolean;
   route: string;
+  visitDay?: VisitDayOfWeek;
+  visitFrequency?: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
   creditLimit: number;
+  creditTermDays?: number; // default 30 days
   currentDebt: number;
+  debtAging?: DebtAging;
   emptyDrums: number;
   drumBalance?: number;
   loyaltyPoints?: number;
@@ -46,6 +78,27 @@ export interface Customer {
   avgCycleDays?: number; // e.g. 18 days cycle
   favoriteSku?: string;
   rfmSegment?: 'VIP' | 'At Risk' | 'Potential' | 'Stable';
+  creditOverridden?: boolean;
+  creditOverrideReason?: string;
+  creditOverrideRequestedAt?: string;
+  creditOverrideApprovedBy?: string;
+}
+
+export interface CreditOverrideRequest {
+  id: string;
+  customerId: string;
+  customerName: string;
+  requestedBy: string;
+  currentDebt: number;
+  creditLimit: number;
+  overdueDays: number;
+  reason: string;
+  requestedAmount: number;
+  requestedAt: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectReason?: string;
 }
 
 export type Vehicle = FleetVehicle;
@@ -74,6 +127,7 @@ export interface OrderItem {
   quantity: number;
   unitPrice: number;
   total: number;
+  unitVolumeLiters?: number;
 }
 
 export interface Order {
@@ -83,6 +137,10 @@ export interface Order {
   customerType?: CustomerType;
   total: number;
   status: OrderStatus;
+  discountPercent?: number;
+  discountAmount?: number;
+  promotionNotes?: string;
+  totalLiters?: number;
   items?: OrderItem[];
   createdAt?: string;
   isOverCredit?: boolean;

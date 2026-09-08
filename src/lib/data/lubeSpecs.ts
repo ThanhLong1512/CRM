@@ -1,0 +1,272 @@
+export interface VehicleLubeSpec {
+  id: string;
+  category: 'Xe máy' | 'Ô tô du lịch' | 'Xe tải & Đầu kéo' | 'Máy công trình & Thủy lực' | 'Thiết bị công nghiệp';
+  modelName: string;
+  engineOilCapacity: string;
+  engineOilSpec: string;
+  transmissionOilCapacity?: string;
+  hydraulicOilCapacity?: string;
+  coolantCapacity?: string;
+  changeInterval: string;
+  notes: string;
+  recommendedSku?: string;
+}
+
+export interface LubeCrossReference {
+  id: string;
+  competitorBrand: 'Castrol' | 'Shell' | 'Mobil' | 'Motul' | 'TotalEnergies' | 'Caltex';
+  competitorProduct: string;
+  category: string;
+  viscosityGrade: string;
+  standard: string;
+  equivalentProduct: string;
+  equivalentSku: string;
+  packageType: string;
+  techAdvantage: string;
+  inStock: boolean;
+}
+
+export const VEHICLE_LUBE_GUIDES: VehicleLubeSpec[] = [
+  {
+    id: "V01",
+    category: "Xe máy",
+    modelName: "Honda Wave Alpha, Blade, Future 125",
+    engineOilCapacity: "0.8L (rã máy: 1.0L)",
+    engineOilSpec: "10W-40 hoặc 20W-50 API SL/SN, JASO MA2",
+    changeInterval: "1,500 - 2,000 km",
+    notes: "Xe số ly hợp ướt, tuyệt đối không dùng nhớt JASO MB (sẽ gây trượt nồi/cháy bố ba càng).",
+    recommendedSku: "DN-4T-10W40-08L",
+  },
+  {
+    id: "V02",
+    category: "Xe máy",
+    modelName: "Honda Vision, Air Blade 125/160, SH 125/160",
+    engineOilCapacity: "0.8L (rã máy: 0.9L)",
+    engineOilSpec: "10W-30 hoặc 10W-40 API SN/SP, JASO MB (Xe tay ga)",
+    transmissionOilCapacity: "Nhớt láp / hộp số: 120ml (chuẩn 80W-90 GL-5)",
+    coolantCapacity: "0.5L (nước làm mát động cơ pha sẵn)",
+    changeInterval: "2,000 - 3,000 km (nhớt láp thay sau 2 lần thay nhớt máy)",
+    notes: "Động cơ eSP+ nhiệt độ cao, dùng JASO MB giảm ma sát tối đa giúp êm xe và tiết kiệm xăng.",
+    recommendedSku: "DN-SCOOTER-10W40-08L",
+  },
+  {
+    id: "V03",
+    category: "Xe máy",
+    modelName: "Yamaha Exciter 150/155, Honda Winner X",
+    engineOilCapacity: "1.0L - 1.1L (khi thay lọc nhớt: 1.1L, rã máy: 1.2L)",
+    engineOilSpec: "10W-40 hoặc 5W-40 Tổng hợp toàn phần (Full Synthetic), JASO MA2",
+    changeInterval: "2,500 - 3,500 km",
+    notes: "Xe côn tay phân khối nhỏ vòng tua máy cao, ưu tiên nhớt tổng hợp chịu nhiệt chống trượt ly hợp.",
+    recommendedSku: "DN-FULLSYN-10W40-1L",
+  },
+  {
+    id: "V04",
+    category: "Ô tô du lịch",
+    modelName: "Toyota Vios, Yaris, Corolla Altis, Camry",
+    engineOilCapacity: "3.8L - 4.4L (đã bao gồm lọc nhớt)",
+    engineOilSpec: "0W-20, 5W-30 API SP / ILSAC GF-6A",
+    transmissionOilCapacity: "Hộp số vô cấp CVT: 7.5L (CVT Fluid FE)",
+    changeInterval: "5,000 km (bán tổng hợp) hoặc 10,000 km (full synthetic)",
+    notes: "Động cơ Dual VVT-i thế hệ mới cần dầu có độ nhớt thấp 5W-30 hoặc 0W-20 để tiết kiệm nhiên liệu.",
+    recommendedSku: "DN-5W30-4L",
+  },
+  {
+    id: "V05",
+    category: "Ô tô du lịch",
+    modelName: "Ford Ranger, Everest 2.0L Bi-Turbo Diesel",
+    engineOilCapacity: "7.0L - 7.5L (kèm lọc dầu)",
+    engineOilSpec: "0W-30 hoặc 5W-30 ACEA C2/C3 (tiêu chuẩn WSS-M2C950-A)",
+    changeInterval: "8,000 - 10,000 km",
+    notes: "Có trang bị bộ lọc hạt khí xả DPF, bắt buộc dùng dầu nhớt tro thấp (Low SAPS) chuẩn ACEA C2/C3.",
+    recommendedSku: "DN-5W30-LOWSAPS-6L",
+  },
+  {
+    id: "V06",
+    category: "Xe tải & Đầu kéo",
+    modelName: "Hino 500 Series (FC 6.2 tấn, FG 8 tấn, FL 15 tấn)",
+    engineOilCapacity: "18L - 21L (FC: 13L, FG/FL: 18L-20L kèm lọc)",
+    engineOilSpec: "15W-40 API CI-4 / CH-4 / ACEA E7",
+    transmissionOilCapacity: "Hộp số: 6.5L (80W-90), Cầu xe: 10L - 13L (85W-140 GL-5)",
+    coolantCapacity: "24L - 28L",
+    changeInterval: "12,000 - 15,000 km (hoặc 250 giờ vận hành liên tục)",
+    notes: "Hino động cơ J05E/J08E phun dầu điện tử Common Rail, tải nặng cõng hàng 15-20 tấn.",
+    recommendedSku: "DN-15W40-18L",
+  },
+  {
+    id: "V07",
+    category: "Xe tải & Đầu kéo",
+    modelName: "Isuzu QKR, Forward FVR, FVM 15 tấn, Giga",
+    engineOilCapacity: "14L (QKR: 9L, FVR/FVM: 14L - 16L)",
+    engineOilSpec: "15W-40 hoặc 20W-50 API CI-4 / DH-1",
+    transmissionOilCapacity: "Hộp số: 5.5L - 7.0L, Cầu sau: 9L - 12L (85W-140 GL-5)",
+    changeInterval: "12,000 - 15,000 km",
+    notes: "Isuzu Blue Power tiêu chuẩn khí thải Euro 4/Euro 5, yêu cầu chỉ số kiểm soát mồ hóng cao.",
+    recommendedSku: "DN-15W40-200L",
+  },
+  {
+    id: "V08",
+    category: "Xe tải & Đầu kéo",
+    modelName: "Đầu kéo container Howo A7, Sitrak 380HP - 440HP",
+    engineOilCapacity: "26L - 28L (động cơ Weichai / MAN MC11)",
+    engineOilSpec: "15W-40 hoặc 20W-50 API CI-4 / CK-4",
+    transmissionOilCapacity: "Hộp số FAST 12JSD: 13L, Cầu Visai MAN 16T: 14L x 2 cầu (85W-140 GL-5)",
+    changeInterval: "15,000 - 20,000 km",
+    notes: "Xe kéo mooc 40-50 tấn chạy Bắc - Nam liên tục, nhiệt độ cầu xe rất cao nên bắt buộc dầu cầu 85W-140 chịu cực áp EP.",
+    recommendedSku: "DN-15W40-200L",
+  },
+  {
+    id: "V09",
+    category: "Máy công trình & Thủy lực",
+    modelName: "Xe đào / cuốc Komatsu PC200-8, PC300, Kobelco SK200",
+    engineOilCapacity: "24L - 28L (động cơ Komatsu SAA6D107E-1: 15W-40 CI-4)",
+    engineOilSpec: "15W-40 API CI-4 / CF-4",
+    hydraulicOilCapacity: "Thùng thủy lực: 140L - 180L (ISO VG 46 hoặc ISO VG 68 AW Anti-Wear)",
+    transmissionOilCapacity: "Hộp số quay toa: 4.5L, Bộ truyền động di chuyển chân chạy: 5.0L x 2 (80W-90)",
+    changeInterval: "Nhớt động cơ: 250 giờ; Dầu thủy lực: 2,000 - 4,000 giờ",
+    notes: "Bơm thủy lực piston áp lực 350 bar sinh nhiệt lớn, bắt buộc dùng dầu thủy lực chuẩn kẽm chống mài mòn ISO HM.",
+    recommendedSku: "DN-HYD-68-200L",
+  },
+  {
+    id: "V10",
+    category: "Thiết bị công nghiệp",
+    modelName: "Máy nén khí trục vít (Screw Compressor) 37kW - 75kW (Hitachi, Atlas Copco, Fusheng)",
+    engineOilCapacity: "20L - 45L (Dầu làm mát và bôi trơn trục vít)",
+    engineOilSpec: "ISO VG 32 hoặc ISO VG 46 gốc Synthetic / Hydrocrack",
+    changeInterval: "3,000 - 4,000 giờ (gốc khoáng cao cấp) hoặc 8,000 giờ (PAO Synthetic)",
+    notes: "Cần khả năng tách nước, tách khí và chống oxy hóa cực tốt để tránh nghẹt lọc tách nhớt (Oil Separator).",
+    recommendedSku: "DN-COMP-46-200L",
+  },
+];
+
+export const LUBE_CROSS_REFERENCES: LubeCrossReference[] = [
+  {
+    id: "CR01",
+    competitorBrand: "Castrol",
+    competitorProduct: "Castrol CRB Turbomax 15W-40 CI-4/E7",
+    category: "Động cơ Diesel tải nặng",
+    viscosityGrade: "15W-40",
+    standard: "API CI-4 / ACEA E7",
+    equivalentProduct: "Dầu Động Cơ Diesel Turbo 15W-40 CI-4",
+    equivalentSku: "DN-15W40-200L",
+    packageType: "Phuy 200L & Thùng 18L",
+    techAdvantage: "Tương đương 100% công nghệ phân tán muội than DuraShield, chỉ số TBN ~10.2 mg KOH/g, giá tiết kiệm hơn 14% cho garage/đội xe.",
+    inStock: true,
+  },
+  {
+    id: "CR02",
+    competitorBrand: "Shell",
+    competitorProduct: "Shell Rimula R4X 15W-40 CI-4",
+    category: "Động cơ Diesel tải nặng",
+    viscosityGrade: "15W-40",
+    standard: "API CI-4 / ACEA E7 / JASO DH-1",
+    equivalentProduct: "Dầu Động Cơ Diesel Turbo 15W-40 CI-4",
+    equivalentSku: "DN-15W40-200L",
+    packageType: "Phuy 200L & Thùng 18L",
+    techAdvantage: "Tính năng chống mài mòn van xupap và kiểm soát cặn piston tương đương chuẩn Dynamic Protection. Hàng sẵn kho giao ngay trong 2h.",
+    inStock: true,
+  },
+  {
+    id: "CR03",
+    competitorBrand: "Mobil",
+    competitorProduct: "Mobil Delvac MX 15W-40 CI-4",
+    category: "Động cơ Diesel tải nặng",
+    viscosityGrade: "15W-40",
+    standard: "API CI-4 / CH-4 / SL",
+    equivalentProduct: "Dầu Động Cơ Diesel Turbo 15W-40 CI-4",
+    equivalentSku: "DN-15W40-18L",
+    packageType: "Thùng 18L",
+    techAdvantage: "Độ bền nhiệt và chống oxy hóa cao, bảo vệ động cơ tải liên tục nhiệt độ cao.",
+    inStock: true,
+  },
+  {
+    id: "CR04",
+    competitorBrand: "Shell",
+    competitorProduct: "Shell Tellus S2 MX 68 (trước đây là Tellus S2 M 68)",
+    category: "Dầu thủy lực công nghiệp",
+    viscosityGrade: "ISO VG 68",
+    standard: "ISO 11158 HM / DIN 51524-2 HLP / Parker Denison HF-0",
+    equivalentProduct: "Dầu Thủy Lực Chống Mài Mòn AW Hydraulic 68",
+    equivalentSku: "DN-HYD-68-200L",
+    packageType: "Phuy 200L & Xô 18L",
+    techAdvantage: "Đạt chuẩn chống mài mòn ASTM D6547, khả năng lọc tách nước ưu việt cho máy ép nhựa, máy chấn và xe cuốc đào.",
+    inStock: true,
+  },
+  {
+    id: "CR05",
+    competitorBrand: "Castrol",
+    competitorProduct: "Castrol Hyspin AWH-M 68 / AWS 68",
+    category: "Dầu thủy lực công nghiệp",
+    viscosityGrade: "ISO VG 68",
+    standard: "DIN 51524 Part 2 HLP, ISO 6743/4 HM",
+    equivalentProduct: "Dầu Thủy Lực Chống Mài Mòn AW Hydraulic 68",
+    equivalentSku: "DN-HYD-68-200L",
+    packageType: "Phuy 200L",
+    techAdvantage: "Chỉ số độ nhớt VI > 105, ổn định áp suất dầu ở nhiệt độ vận hành 70-80°C liên tục không bị tụt áp.",
+    inStock: true,
+  },
+  {
+    id: "CR06",
+    competitorBrand: "TotalEnergies",
+    competitorProduct: "Total Rubia TIR 7400 15W-40 CI-4",
+    category: "Động cơ Diesel tải nặng",
+    viscosityGrade: "15W-40",
+    standard: "API CI-4 / CH-4, ACEA E7",
+    equivalentProduct: "Dầu Động Cơ Diesel Turbo 15W-40 CI-4",
+    equivalentSku: "DN-15W40-200L",
+    packageType: "Phuy 200L",
+    techAdvantage: "Dầu gốc khoáng nhóm II tinh chế sâu, kiểm soát độ sạch pít-tông tối ưu cho động cơ Euro 2/3/4.",
+    inStock: true,
+  },
+  {
+    id: "CR07",
+    competitorBrand: "Caltex",
+    competitorProduct: "Caltex Delo Gold Ultra 15W-40 CI-4",
+    category: "Động cơ Diesel tải nặng",
+    viscosityGrade: "15W-40",
+    standard: "API CI-4 / SL, ACEA E7, JASO DH-1",
+    equivalentProduct: "Dầu Động Cơ Diesel Turbo 15W-40 CI-4",
+    equivalentSku: "DN-15W40-18L",
+    packageType: "Thùng 18L",
+    techAdvantage: "Công nghệ ISOSYN kiểm soát cặn bùn, bảo vệ trục cam và bạc đạn.",
+    inStock: true,
+  },
+  {
+    id: "CR08",
+    competitorBrand: "Castrol",
+    competitorProduct: "Castrol Axle GL-5 85W-140 / 80W-90",
+    category: "Dầu cầu & hộp số bánh răng",
+    viscosityGrade: "85W-140 hoặc 80W-90",
+    standard: "API GL-5 / MIL-L-2105D",
+    equivalentProduct: "Dầu Cầu & Hộp Số Bánh Răng 80W-90 GL-5",
+    equivalentSku: "DN-GEAR-80W90",
+    packageType: "Xô 4L & Xô 18L",
+    techAdvantage: "Phụ gia chịu cực áp Sunfua-Photpho bảo vệ bánh răng hypoid chịu tải nặng và va đập giật cục khi xe chở quá tải.",
+    inStock: true,
+  },
+  {
+    id: "CR09",
+    competitorBrand: "Motul",
+    competitorProduct: "Motul Scooter Power LE 10W-40",
+    category: "Dầu xe máy 4T",
+    viscosityGrade: "10W-40",
+    standard: "API SN / JASO MB (100% Synthetic)",
+    equivalentProduct: "Dầu Nhớt Xe Tay Ga Scooter 10W-40 JASO MB",
+    equivalentSku: "DN-SCOOTER-10W40-08L",
+    packageType: "Lon 0.8L",
+    techAdvantage: "Độ ma sát thấp tuyệt đối chuẩn MB, hỗ trợ bốc máy, giảm tiêu hao nhiên liệu 5% cho dòng xe tay ga Honda/Yamaha.",
+    inStock: true,
+  },
+  {
+    id: "CR10",
+    competitorBrand: "Mobil",
+    competitorProduct: "Mobil Rarus 425 / 427 (Dầu máy nén khí)",
+    category: "Dầu máy nén khí",
+    viscosityGrade: "ISO VG 46 / 100",
+    standard: "DIN 51506 VDL",
+    equivalentProduct: "Dầu Máy Nén Khí Trục Vít Screw Comp 46",
+    equivalentSku: "DN-COMP-46-200L",
+    packageType: "Phuy 200L",
+    techAdvantage: "Khả năng chống hình thành cặn carbon và cặn vec-ni trên cánh trục vít, tuổi thọ lên tới 4,000 giờ.",
+    inStock: true,
+  },
+];

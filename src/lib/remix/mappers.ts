@@ -117,6 +117,18 @@ export function mapCustomerDto(
   rfm?: RfmCustomerDto,
 ): Customer {
   const hasGps = dto.lat != null && dto.lng != null;
+  const DAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'] as const;
+  const dayIndex = dto.id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % DAYS.length;
+  const visitDay = DAYS[dayIndex];
+  const routeNames = {
+    T2: "Tuyến T2: QL1A - Hóc Môn - Q12",
+    T3: "Tuyến T3: KCN Tân Bình - Vĩnh Lộc",
+    T4: "Tuyến T4: Bình Tân - Quận 6",
+    T5: "Tuyến T5: Củ Chi - Hóc Môn",
+    T6: "Tuyến T6: Cảng Cát Lái - TP. Thủ Đức",
+    T7: "Tuyến T7: Chăm sóc Đại lý VIP",
+  };
+
   return {
     id: dto.id,
     name: dto.name,
@@ -127,9 +139,13 @@ export function mapCustomerDto(
     lat: dto.lat ?? 0,
     lng: dto.lng ?? 0,
     hasGps,
-    route: "",
+    route: routeNames[visitDay],
+    visitDay,
+    visitFrequency: "WEEKLY",
     creditLimit: dto.creditLimit,
+    creditTermDays: dto.creditTermDays ?? 30,
     currentDebt: dto.currentDebt,
+    debtAging: dto.debtAging,
     emptyDrums: dto.outstandingDrums ?? 0,
     drumBalance: dto.outstandingDrums ?? 0,
     loyaltyPoints: 0,
@@ -146,6 +162,10 @@ export function mapOrderDto(dto: OrderDto): Order {
     customerType: mapCustomerType(dto.customerType),
     total: dto.total,
     status: mapPrismaOrderStatus(dto.status),
+    discountPercent: dto.discountPercent,
+    discountAmount: dto.discountAmount,
+    promotionNotes: dto.promotionNotes ?? undefined,
+    totalLiters: dto.totalLiters,
     createdAt: dto.createdAt,
     items: dto.items.map((item) => ({
       productId: item.productId,

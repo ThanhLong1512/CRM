@@ -16,6 +16,7 @@ type ParsedCustomerInput = {
   address: string | null;
   type: CustomerType;
   creditLimit: number;
+  creditTermDays: number;
   lat: number | null;
   lng: number | null;
 };
@@ -44,6 +45,7 @@ function parseCustomerFormData(
   const address = String(formData.get("address") ?? "").trim();
   const typeRaw = String(formData.get("type") ?? "").trim().toUpperCase();
   const creditLimitRaw = String(formData.get("creditLimit") ?? "").trim();
+  const creditTermDaysRaw = String(formData.get("creditTermDays") ?? "").trim();
   const latRaw = String(formData.get("lat") ?? "").trim();
   const lngRaw = String(formData.get("lng") ?? "").trim();
 
@@ -58,6 +60,11 @@ function parseCustomerFormData(
   const creditLimit = Number(creditLimitRaw || "0");
   if (!Number.isFinite(creditLimit) || creditLimit < 0) {
     return { error: "Hạn mức công nợ không hợp lệ." };
+  }
+
+  const creditTermDays = creditTermDaysRaw ? Math.max(1, Number(creditTermDaysRaw)) : 30;
+  if (!Number.isFinite(creditTermDays)) {
+    return { error: "Thời hạn công nợ (ngày) không hợp lệ." };
   }
 
   const latParsed = parseOptionalCoord(latRaw, "Vĩ độ (lat)");
@@ -77,6 +84,7 @@ function parseCustomerFormData(
       address: address || null,
       type: typeRaw as CustomerType,
       creditLimit,
+      creditTermDays,
       lat: latParsed.value,
       lng: lngParsed.value,
     },

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Customer } from '../../types';
 import { calculateHaversineDistance, formatVND } from '../../mockData';
 import { soundFX } from '../../utils/audio';
@@ -21,6 +21,9 @@ import {
   CreditCard,
   ShieldCheck,
   Clock,
+  Camera,
+  Image as ImageIcon,
+  Trash2,
 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -29,7 +32,7 @@ interface PwaRouteMapProps {
   customers: Customer[];
   activeCustomer: Customer;
   onSelectCustomer: (customer: Customer) => void;
-  onCheckInSuccess: (customer: Customer, checkInData: { timestamp: string; lat: number; lng: number; accuracyMeters: number }) => void;
+  onCheckInSuccess: (customer: Customer, checkInData: { timestamp: string; lat: number; lng: number; accuracyMeters: number; photoBase64?: string }) => void;
   checkedInCustomerIds: Set<string>;
   onNavigateToCatalog: () => void;
 }
@@ -42,15 +45,40 @@ export default function PwaRouteMap({
   checkedInCustomerIds,
   onNavigateToCatalog,
 }: PwaRouteMapProps) {
-  // Geofence simulated or actual distance
   const [distanceMeters, setDistanceMeters] = useState<number>(28); // Default in-range 28m
   const [isSimulatingGps, setIsSimulatingGps] = useState<boolean>(true);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [checkInPhoto, setCheckInPhoto] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number }>({
     lat: activeCustomer.lat + 0.0002,
     lng: activeCustomer.lng + 0.0001,
   });
+
+  // MCP Route by Day of Week state
+  const getTodayKey = (): 'T2' | 'T3' | 'T4' | 'T5' | 'T6' | 'T7' => {
+    const day = new Date().getDay();
+    if (day === 2) return 'T3';
+    if (day === 3) return 'T4';
+    if (day === 4) return 'T5';
+    if (day === 5) return 'T6';
+    if (day === 6) return 'T7';
+    return 'T2';
+  };
+
+  const todayKey = getTodayKey();
+  const [selectedDay, setSelectedDay] = useState<string>('today');
+
+  const activeBeatDay = selectedDay === 'today' ? todayKey : selectedDay;
+  const filteredBeatCustomers = useMemo(() => {
+    if (selectedDay === 'all') return customers;
+    return customers.filter((c: Customer) => (c.visitDay || 'T2') === activeBeatDay);
+  }, [customers, selectedDay, activeBeatDay]);
+
+  const beatTotal = filteredBeatCustomers.length || 1;
+  const beatVisited = filteredBeatCustomers.filter((c: Customer) => checkedInCustomerIds.has(c.id)).length;
+  const beatProgress = Math.round((beatVisited / beatTotal) * 100);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
@@ -209,6 +237,19 @@ export default function PwaRouteMap({
     );
   };
 
+  // Handle Camera Photo Selection for Check-In
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setCheckInPhoto(base64);
+      soundFX.playClick();
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Perform Tactile Check-In
   const handleCheckIn = () => {
     if (!isInRange) return;
@@ -227,6 +268,7 @@ export default function PwaRouteMap({
       lat: userLocation.lat,
       lng: userLocation.lng,
       accuracyMeters: distanceMeters,
+      photoBase64: checkInPhoto || undefined,
     });
   };
 
@@ -286,23 +328,80 @@ export default function PwaRouteMap({
 
           {/* Today's Route Stops Header & Multicolumn Grid */}
           <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2.5">
-                <MapPin className="w-5 h-5 text-amber-500 shrink-0" />
-                <h3 className="text-base sm:text-lg lg:text-xl font-black text-slate-900 tracking-tight">
-                  Điểm Bán Trong Tuyến Hôm Nay ({customers.length})
-                </h3>
+            {/* MCP Day Switcher & Route Progress */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <MapPin className="w-5 h-5 text-amber-500 shrink-0" />
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                      Lịch Tuyến Bán Hàng MCP ({filteredBeatCustomers.length} điểm)
+                    </h3>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      Tự động phân bổ tuyến ghé thăm định kỳ Thứ 2 - Thứ 7
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm font-mono font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800">
+                    Đã ghé: {beatVisited}/{beatTotal} ({beatProgress}%)
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs sm:text-sm font-mono font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800">
-                  Đã ghé: {customers.filter((c) => checkedInCustomerIds.has(c.id)).length}/{customers.length}
-                </span>
+
+              {/* Day selection tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay('today')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition cursor-pointer flex items-center gap-1 ${
+                    selectedDay === 'today'
+                      ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>Hôm nay ({todayKey})</span>
+                </button>
+                {(['T2', 'T3', 'T4', 'T5', 'T6', 'T7'] as const).map((day) => (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => setSelectedDay(day)}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition cursor-pointer ${
+                      selectedDay === day
+                        ? 'bg-slate-900 text-white font-black shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Thứ {day === 'T7' ? '7' : day.slice(1)}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition cursor-pointer ${
+                    selectedDay === 'all'
+                      ? 'bg-slate-900 text-white font-black shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Tất cả ({customers.length})
+                </button>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full transition-all duration-300 rounded-full"
+                  style={{ width: `${beatProgress}%` }}
+                />
               </div>
             </div>
 
             {/* Multi-Column Grid of Route Stops */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 pt-1">
-              {customers.map((c) => {
+              {filteredBeatCustomers.map((c: Customer) => {
                 const isSelected = c.id === activeCustomer.id;
                 const isCustCheckedIn = checkedInCustomerIds.has(c.id);
 
@@ -477,16 +576,45 @@ export default function PwaRouteMap({
               </div>
             </div>
 
+            {/* Hidden Mobile Camera Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoSelect}
+              className="hidden"
+            />
+
             {/* The Tactile Check-In Action Button */}
-            <div className="pt-2">
+            <div className="pt-2 space-y-3">
               {isCheckedIn ? (
                 <div className="space-y-3">
-                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-sm text-emerald-900 font-bold">
-                    <div className="flex items-center gap-2.5">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                      <span>Đã Check-in tại {activeCustomer.name}</span>
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-900 font-bold space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                        <span>Đã Check-in tại {activeCustomer.name}</span>
+                      </div>
+                      <span className="font-mono text-emerald-700 text-xs font-bold">&plusmn;{distanceMeters}m</span>
                     </div>
-                    <span className="font-mono text-emerald-700 text-xs font-bold">&plusmn;{distanceMeters}m</span>
+
+                    {checkInPhoto && (
+                      <div className="relative rounded-xl overflow-hidden border border-emerald-300 max-h-36 bg-black">
+                        <img
+                          src={checkInPhoto}
+                          alt="Ảnh biển hiệu"
+                          className="w-full h-36 object-cover"
+                        />
+                        <div className="absolute bottom-0 inset-x-0 bg-slate-950/75 text-white p-1.5 text-[10px] font-mono flex items-center justify-between">
+                          <span className="flex items-center gap-1 font-sans font-semibold">
+                            <Camera className="size-3 text-emerald-400" />
+                            Biển hiệu garage
+                          </span>
+                          <span>{userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -499,19 +627,81 @@ export default function PwaRouteMap({
                   </button>
                 </div>
               ) : isInRange ? (
-                <button
-                  id="pwa-checkin-action-btn"
-                  onClick={handleCheckIn}
-                  className="w-full h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 active:scale-[0.98] text-white font-black text-base sm:text-lg flex flex-col items-center justify-center shadow-lg shadow-emerald-600/30 transition-all cursor-pointer animate-pulse"
-                >
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-white" />
-                    <span>CHECK-IN ĐIỂM BÁN (CÁCH {distanceMeters}M)</span>
-                  </div>
-                  <span className="text-xs text-emerald-100 font-normal tracking-wide">
-                    Đã vào đúng bán kính Geofence &bull; Nhấn để mở khóa lên đơn
-                  </span>
-                </button>
+                <div className="space-y-3">
+                  {/* Photo Capture Card Before Check-in */}
+                  {checkInPhoto ? (
+                    <div className="relative rounded-2xl overflow-hidden border-2 border-emerald-400 shadow-sm bg-slate-950">
+                      <img
+                        src={checkInPhoto}
+                        alt="Ảnh biển hiệu vừa chụp"
+                        className="w-full h-40 object-cover"
+                      />
+                      <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="rounded-lg bg-slate-900/80 hover:bg-slate-900 text-white px-2 py-1 text-xs font-bold backdrop-blur-xs flex items-center gap-1 cursor-pointer"
+                        >
+                          <Camera className="size-3" />
+                          <span>Chụp lại</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCheckInPhoto(null)}
+                          className="rounded-lg bg-rose-600/90 hover:bg-rose-600 text-white p-1 text-xs cursor-pointer"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                      <div className="absolute bottom-0 inset-x-0 bg-linear-to-t from-black/90 via-black/60 to-transparent text-white p-2.5 text-xs">
+                        <div className="font-bold text-amber-300 flex items-center gap-1">
+                          <CheckCircle2 className="size-3.5 text-emerald-400" />
+                          <span>Đã chụp ảnh biển hiệu Garage đối chiếu</span>
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-300 mt-0.5">
+                          Tọa độ GPS: {userLocation.lat.toFixed(5)}, {userLocation.lng.toFixed(5)}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full py-3 px-4 rounded-2xl border-2 border-dashed border-amber-300 hover:border-amber-500 bg-amber-50/60 hover:bg-amber-100/70 text-slate-800 flex items-center justify-between transition-colors cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-amber-500 text-slate-950 group-hover:scale-105 transition-transform">
+                          <Camera className="size-4.5" />
+                        </div>
+                        <div className="text-left">
+                          <div className="text-xs font-extrabold text-slate-900">
+                            Chụp Ảnh Biển Hiệu / Đồng Hồ Xe
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Bằng chứng đối chiếu viếng thăm thực tế
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-lg">
+                        Mở Camera
+                      </span>
+                    </button>
+                  )}
+
+                  <button
+                    id="pwa-checkin-action-btn"
+                    onClick={handleCheckIn}
+                    className="w-full h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 active:scale-[0.98] text-white font-black text-base sm:text-lg flex flex-col items-center justify-center shadow-lg shadow-emerald-600/30 transition-all cursor-pointer animate-pulse"
+                  >
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-white" />
+                      <span>CHECK-IN ĐIỂM BÁN (CÁCH {distanceMeters}M)</span>
+                    </div>
+                    <span className="text-xs text-emerald-100 font-normal tracking-wide">
+                      {checkInPhoto ? "Đã đính kèm ảnh biển hiệu" : "Đã vào đúng bán kính Geofence"} &bull; Nhấn để mở khóa lên đơn
+                    </span>
+                  </button>
+                </div>
               ) : (
                 <div className="w-full p-4 sm:p-5 rounded-2xl bg-slate-100 text-slate-500 flex flex-col items-center justify-center text-center cursor-not-allowed border border-slate-200">
                   <div className="font-extrabold text-sm sm:text-base text-slate-700">

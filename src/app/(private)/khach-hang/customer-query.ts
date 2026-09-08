@@ -1,3 +1,5 @@
+import type { DebtAging } from "@/types";
+
 export type CustomerDto = {
   id: string;
   name: string;
@@ -5,7 +7,9 @@ export type CustomerDto = {
   address: string | null;
   type: "GARAGE" | "FLEET";
   creditLimit: number;
+  creditTermDays?: number;
   currentDebt: number;
+  debtAging?: DebtAging;
   outstandingDrums: number;
   lat: number | null;
   lng: number | null;

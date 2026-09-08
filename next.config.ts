@@ -15,7 +15,7 @@ import type { NextConfig } from "next";
  * Deferred here so the boilerplate compiles without extra PWA tooling.
  */
 const nextConfig: NextConfig = {
-  /* config options here */
+  devIndicators: false,
 };
 
 export default nextConfig;

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useEffect, useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Cylinder, Package } from "lucide-react";
 import { toast } from "sonner";
 import { createOrder } from "@/app/(private)/don-hang/actions";
 import { ORDERS_QUERY_KEY } from "@/app/(private)/don-hang/order-query";
@@ -37,20 +37,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const vndFormatter = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-});
-
 type LineDraft = {
   key: string;
   productId: string;
   quantity: number;
 };
 
+const vndFormatter = new Intl.NumberFormat("vi-VN", {
+  style: "currency",
+  currency: "VND",
+  maximumFractionDigits: 0,
+});
+
 function newLine(): LineDraft {
   return {
-    key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    key: `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     productId: "",
     quantity: 1,
   };
@@ -61,6 +62,9 @@ export function CreateOrderDialog() {
   const [open, setOpen] = useState(false);
   const [customerId, setCustomerId] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([newLine()]);
+  const [drumDelivered, setDrumDelivered] = useState<number>(0);
+  const [drumReturned, setDrumReturned] = useState<number>(0);
+  const DRUM_DEPOSIT_PRICE = 300000; // 300,000 VND / steel drum 200L
   const [pending, startTransition] = useTransition();
 
   const { data: customers = [] } = useQuery({
@@ -79,6 +83,18 @@ export function CreateOrderDialog() {
     return map;
   }, [products]);
 
+  // Auto count delivered drums from selected line items
+  useEffect(() => {
+    let count = 0;
+    lines.forEach((line) => {
+      const prod = productMap.get(line.productId);
+      if (prod && (prod.sku.toUpperCase().includes("200L") || prod.name.toLowerCase().includes("phuy"))) {
+        count += line.quantity;
+      }
+    });
+    setDrumDelivered(count);
+  }, [lines, productMap]);
+
   const selectedCustomer: CustomerDto | undefined = customers.find(
     (c) => c.id === customerId,
   );
@@ -89,11 +105,16 @@ export function CreateOrderDialog() {
     return product.unitPrice * line.quantity;
   });
 
-  const total = lineTotals.reduce((sum, value) => sum + value, 0);
+  const goodsTotal = lineTotals.reduce((sum, value) => sum + value, 0);
+  const netDrumDiff = drumDelivered - drumReturned;
+  const drumDepositDifference = netDrumDiff * DRUM_DEPOSIT_PRICE;
+  // Số tiền phải thu = Tiền Dầu + Chênh lệch cọc vỏ (nếu trả nhiều vỏ cũ hơn thì trừ thẳng cọc vỏ)
+  const totalPayable = Math.max(0, goodsTotal + drumDepositDifference);
+
   const creditLimit = selectedCustomer?.creditLimit ?? 0;
   const currentDebt = selectedCustomer?.currentDebt ?? 0;
   const remaining = creditLimit - currentDebt;
-  const wouldExceed = Boolean(selectedCustomer) && currentDebt + total > creditLimit;
+  const wouldExceed = Boolean(selectedCustomer) && currentDebt + totalPayable > creditLimit;
 
   const stockIssue = lines.some((line) => {
     const product = productMap.get(line.productId);
@@ -110,6 +131,8 @@ export function CreateOrderDialog() {
   function resetForm() {
     setCustomerId("");
     setLines([newLine()]);
+    setDrumDelivered(0);
+    setDrumReturned(0);
   }
 
   function handleSubmit() {
@@ -328,20 +351,120 @@ export function CreateOrderDialog() {
             })}
           </div>
 
-          <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-            <span className="text-sm font-medium">Tổng đơn</span>
-            <span className="text-lg font-semibold tabular-nums">
-              {vndFormatter.format(total)}
-            </span>
+          {/* Section: Hoán đổi vỏ phuy & Khấu trừ cọc vỏ trực tiếp */}
+          <div className="rounded-xl border border-cyan-200 bg-cyan-50/50 p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-cyan-950 flex items-center gap-1.5">
+                <Cylinder className="size-4 text-cyan-700" />
+                <span>Hoán đổi vỏ phuy &amp; Trừ cọc vỏ trực tiếp</span>
+              </span>
+              <span className="text-[11px] font-semibold text-cyan-800 font-mono">
+                Cọc: 300.000đ/vỏ 200L
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <Label className="text-xs font-semibold text-cyan-900 mb-1 block">
+                  Phuy mới giao (+)
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={drumDelivered}
+                  disabled={pending}
+                  onChange={(e) => setDrumDelivered(Math.max(0, parseInt(e.target.value || "0", 10)))}
+                  className="bg-white border-cyan-300 font-mono font-bold text-cyan-900"
+                />
+                <span className="text-[10px] text-cyan-700">Tự động đếm theo đơn</span>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-emerald-900 mb-1 block">
+                  Vỏ cũ thu về (-)
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={drumReturned}
+                  disabled={pending}
+                  onChange={(e) => setDrumReturned(Math.max(0, parseInt(e.target.value || "0", 10)))}
+                  className="bg-white border-emerald-300 font-mono font-bold text-emerald-900"
+                />
+                <span className="text-[10px] text-emerald-700">Trừ tiền cọc vỏ trực tiếp</span>
+              </div>
+            </div>
+
+            {/* Chi tiết khấu trừ cọc */}
+            <div className="pt-2 border-t border-cyan-200/80 flex items-center justify-between text-xs">
+              <span className="text-slate-600">
+                Chênh lệch vỏ:{" "}
+                <strong className={netDrumDiff >= 0 ? "text-cyan-900" : "text-emerald-700"}>
+                  {netDrumDiff > 0
+                    ? `+${netDrumDiff} phuy mới`
+                    : netDrumDiff < 0
+                      ? `${netDrumDiff} vỏ trả thêm`
+                      : "Đổi ngang 1:1"}
+                </strong>
+              </span>
+              <span
+                className={`font-mono font-bold text-xs ${
+                  drumDepositDifference < 0 ? "text-emerald-700" : "text-cyan-900"
+                }`}
+              >
+                {drumDepositDifference < 0
+                  ? `Khấu trừ cọc: -${vndFormatter.format(Math.abs(drumDepositDifference))}`
+                  : drumDepositDifference > 0
+                    ? `Thêm cọc: +${vndFormatter.format(drumDepositDifference)}`
+                    : "Cọc vỏ: 0đ"}
+              </span>
+            </div>
+          </div>
+
+          {/* Bảng tổng kết số tiền phải thu thực tế */}
+          <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs">
+            <div className="flex justify-between text-slate-600">
+              <span>Tiền hàng (dầu nhớt):</span>
+              <span className="font-mono font-semibold">{vndFormatter.format(goodsTotal)}</span>
+            </div>
+            {drumDepositDifference !== 0 && (
+              <div className="flex justify-between">
+                <span
+                  className={
+                    drumDepositDifference < 0
+                      ? "text-emerald-700 font-medium"
+                      : "text-cyan-800 font-medium"
+                  }
+                >
+                  {drumDepositDifference < 0
+                    ? "Khấu trừ tiền cọc vỏ cũ thu về:"
+                    : "Tiền cọc thêm phuy mới:"}
+                </span>
+                <span
+                  className={`font-mono font-bold ${
+                    drumDepositDifference < 0 ? "text-emerald-700" : "text-cyan-800"
+                  }`}
+                >
+                  {drumDepositDifference < 0
+                    ? `-${vndFormatter.format(Math.abs(drumDepositDifference))}`
+                    : `+${vndFormatter.format(drumDepositDifference)}`}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-sm">
+              <span className="font-bold text-slate-900">Số tiền phải thu (Thực thanh toán):</span>
+              <span className="text-base sm:text-lg font-black text-amber-600 tabular-nums font-mono">
+                {vndFormatter.format(totalPayable)}
+              </span>
+            </div>
           </div>
 
           {wouldExceed ? (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive font-semibold">
               Vượt hạn mức công nợ — không thể chốt đơn.
             </p>
           ) : null}
           {stockIssue ? (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive font-semibold">
               Một hoặc nhiều dòng vượt tồn kho hiện có.
             </p>
           ) : null}

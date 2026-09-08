@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Customer, CustomerType } from "../types";
@@ -21,7 +21,23 @@ import {
   Trash2,
   X,
   Navigation,
+  AlertCircle,
+  CheckCircle2,
+  Receipt,
+  FileSpreadsheet,
+  MessageCircle,
+  Lock,
+  AlertOctagon,
+  Send,
+  ShieldCheck,
+  UserCheck,
 } from "lucide-react";
+import CollectDebtModal from "./CollectDebtModal";
+import ZaloShareModal from "./ZaloShareModal";
+import { exportCustomerDebtReport } from "@/lib/exportUtils";
+import type { CreditOverrideRequest } from "../types";
+import type { AuthUserProfile } from "@/components/auth/authData";
+import { soundFX } from "@/components/utils/audio";
 
 export type CustomerFormInput = {
   name: string;
@@ -29,6 +45,7 @@ export type CustomerFormInput = {
   address: string;
   type: "GARAGE" | "FLEET";
   creditLimit: number;
+  creditTermDays?: number;
   lat: string;
   lng: string;
 };
@@ -40,6 +57,12 @@ interface CustomersViewProps {
   onCreateCustomer: (input: CustomerFormInput) => void;
   onUpdateCustomer: (customerId: string, input: CustomerFormInput) => void;
   onDeleteCustomer: (customerId: string) => void;
+  onPayDebt?: (customerId: string, amount: number) => void;
+  sessionUser?: AuthUserProfile | null;
+  creditOverrideRequests?: CreditOverrideRequest[];
+  onRequestCreditOverride?: (customerId: string, reason: string, amount: number) => void;
+  onApproveCreditOverride?: (customerId: string) => void;
+  onRejectCreditOverride?: (customerId: string, reason?: string) => void;
 }
 
 function remixTypeToPrisma(type: CustomerType): "GARAGE" | "FLEET" {
@@ -53,6 +76,7 @@ function emptyForm(): CustomerFormInput {
     address: "",
     type: "GARAGE",
     creditLimit: 10_000_000,
+    creditTermDays: 30,
     lat: "",
     lng: "",
   };
@@ -65,6 +89,12 @@ export default function CustomersView({
   onCreateCustomer,
   onUpdateCustomer,
   onDeleteCustomer,
+  onPayDebt,
+  sessionUser,
+  creditOverrideRequests = [],
+  onRequestCreditOverride,
+  onApproveCreditOverride,
+  onRejectCreditOverride,
 }: CustomersViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
@@ -72,10 +102,21 @@ export default function CustomersView({
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [newLimitInput, setNewLimitInput] = useState(0);
 
+  const [selectedCollectCustomer, setSelectedCollectCustomer] = useState<Customer | null>(null);
+
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [formCustomerId, setFormCustomerId] = useState<string | null>(null);
   const [form, setForm] = useState<CustomerFormInput>(emptyForm);
+  const [zaloCustomer, setZaloCustomer] = useState<Customer | null>(null);
+
+  // Credit Hard-lock & Override Modal State
+  const [selectedLockedCustomer, setSelectedLockedCustomer] = useState<Customer | null>(null);
+  const [showCreditLockModal, setShowCreditLockModal] = useState(false);
+  const [overrideReason, setOverrideReason] = useState(
+    "Khách VIP lâu năm, đang cần nhớt gấp bảo dưỡng dàn xe chạy tour, cam kết thanh toán 50% vào thứ Sáu tuần này."
+  );
+  const [overrideAmount, setOverrideAmount] = useState<number>(31_200_000);
 
   const getTypeMeta = (type: CustomerType) => {
     switch (type) {
@@ -142,6 +183,7 @@ export default function CustomersView({
       address: c.address ?? "",
       type: remixTypeToPrisma(c.type),
       creditLimit: c.creditLimit,
+      creditTermDays: c.creditTermDays ?? 30,
       lat: c.hasGps && c.lat ? String(c.lat) : "",
       lng: c.hasGps && c.lng ? String(c.lng) : "",
     });
@@ -192,14 +234,25 @@ export default function CustomersView({
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-bold text-slate-950 shadow-xs hover:bg-amber-400"
-        >
-          <Plus className="size-4" />
-          Thêm khách hàng
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => exportCustomerDebtReport(customers)}
+            className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 shadow-xs hover:bg-emerald-100 transition-colors"
+            title="Xuất danh sách công nợ khách hàng và vỏ phuy ra file Excel CSV"
+          >
+            <FileSpreadsheet className="size-4 text-emerald-700" />
+            <span>Xuất Excel Sổ Nợ</span>
+          </button>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-bold text-slate-950 shadow-xs hover:bg-amber-400"
+          >
+            <Plus className="size-4" />
+            <span>Thêm khách hàng</span>
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -258,6 +311,87 @@ export default function CustomersView({
         </div>
       </div>
 
+      {/* Sequence Diagram: Credit Approval Loop - Admin Queue */}
+      {creditOverrideRequests && creditOverrideRequests.some((r) => r.status === "PENDING") && (
+        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/90 p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between border-b border-amber-200/80 pb-2.5">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-5 text-amber-700" />
+              <div>
+                <h3 className="font-bold text-amber-950 text-sm flex items-center gap-2">
+                  <span>Hàng Đợi Phê Duyệt Vượt Trần Nợ (Credit Override Approval Queue)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-mono text-[10px] font-extrabold">
+                    {creditOverrideRequests.filter((r) => r.status === "PENDING").length} đề xuất chờ duyệt
+                  </span>
+                </h3>
+                <p className="text-xs text-amber-800/90">
+                  Phê duyệt nợ ngoại lệ dành cho Ban Giám Đốc (ADMIN) khi Sales tạo đơn cho khách quá hạn
+                </p>
+              </div>
+            </div>
+            <div className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-white/80 px-2.5 py-1 rounded-lg border border-amber-300">
+              <UserCheck className="size-3.5 text-amber-700" />
+              <span>Quyền ADMIN</span>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-1 lg:grid-cols-2">
+            {creditOverrideRequests
+              .filter((r) => r.status === "PENDING")
+              .map((req) => (
+                <div
+                  key={req.id}
+                  className="rounded-xl border border-amber-200 bg-white p-3.5 shadow-2xs space-y-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs sm:text-sm">
+                        {req.customerName}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-mono">
+                        Nợ hiện tại: <strong>{formatVND(req.currentDebt)}</strong> / HM: {formatVND(req.creditLimit)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 px-2 py-0.5 rounded-md bg-rose-100 border border-rose-300 text-rose-700 text-[10px] font-extrabold font-mono">
+                      Quá hạn {req.overdueDays}d
+                    </span>
+                  </div>
+
+                  <div className="rounded-lg bg-amber-50/60 p-2.5 border border-amber-100 text-xs text-slate-700 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span>Sales đề xuất: <strong>{req.requestedBy}</strong></span>
+                      <span className="font-mono">{req.requestedAt}</span>
+                    </div>
+                    <p className="italic text-slate-800">"{req.reason}"</p>
+                    <div className="pt-1 text-[11px] text-amber-950 font-bold flex justify-between">
+                      <span>Số tiền xin bảo lãnh cấp đơn:</span>
+                      <span className="font-mono text-amber-800 text-xs font-black">{formatVND(req.requestedAmount)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => onRejectCreditOverride && onRejectCreditOverride(req.customerId)}
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                    >
+                      Từ chối
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onApproveCreditOverride && onApproveCreditOverride(req.customerId)}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <CheckCircle2 className="size-3.5" />
+                      <span>Phê Duyệt Vượt Trần</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs">
         <div className="relative min-w-[240px] flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
@@ -293,13 +427,19 @@ export default function CustomersView({
               (c.currentDebt / (c.creditLimit || 1)) * 100,
             );
             const remainingCredit = Math.max(0, c.creditLimit - c.currentDebt);
-            const isLocked = c.currentDebt >= c.creditLimit;
-            const isWarning = ratio >= 85 && !isLocked;
+            const isOverdue = (c.debtAging?.maxOverdueDays ?? 0) > 0 || c.debtAging?.status === "critical";
+            const isOverLimit = c.currentDebt >= c.creditLimit;
+            // Customer is hard-locked from ordering if they have overdue debt or exceed credit limit,
+            // UNLESS the Admin has approved a credit override exception (creditOverridden === true)!
+            const isHardLocked = !c.creditOverridden && (isOverdue || isOverLimit);
+            const isWarning = (ratio >= 85 || isOverdue) && !isHardLocked && !c.creditOverridden;
 
             return (
               <div
                 key={c.id}
-                className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-xs transition-all hover:shadow-md"
+                className={`flex flex-col justify-between rounded-2xl border bg-white p-4 shadow-xs transition-all hover:shadow-md ${
+                  isHardLocked ? "border-rose-300 bg-rose-50/10" : "border-slate-200"
+                }`}
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
@@ -328,6 +468,12 @@ export default function CustomersView({
                           >
                             {c.hasGps ? "Đã cắm GPS" : "Chưa có GPS"}
                           </span>
+                          {c.creditOverridden && (
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-extrabold text-emerald-800 border border-emerald-300">
+                              <ShieldCheck className="size-3 text-emerald-700" />
+                              <span>Admin duyệt ngoại lệ</span>
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -358,7 +504,7 @@ export default function CustomersView({
                     <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
                       <div
                         className={`h-full rounded-full ${
-                          isLocked
+                          isHardLocked || isOverLimit || isOverdue
                             ? "bg-rose-500"
                             : isWarning
                               ? "bg-amber-500"
@@ -373,6 +519,30 @@ export default function CustomersView({
                       </span>
                       <span>Còn {formatVND(remainingCredit)}</span>
                     </div>
+
+                    {c.currentDebt > 0 && (
+                      <div className="flex items-center justify-between border-t border-slate-200/60 pt-1 text-[11px]">
+                        <span className="text-slate-500">
+                          Tuổi nợ ({c.creditTermDays || 30}d):
+                        </span>
+                        {c.debtAging?.status === "critical" ? (
+                          <span className="flex items-center gap-1 font-bold text-rose-600">
+                            <AlertCircle className="size-3 shrink-0 text-rose-600" />
+                            Quá hạn {c.debtAging.maxOverdueDays}d
+                          </span>
+                        ) : c.debtAging?.status === "warning" ? (
+                          <span className="flex items-center gap-1 font-bold text-amber-600">
+                            <AlertCircle className="size-3 shrink-0 text-amber-600" />
+                            Quá hạn {c.debtAging.maxOverdueDays}d
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 font-bold text-emerald-600">
+                            <CheckCircle2 className="size-3 shrink-0 text-emerald-600" />
+                            Trong hạn
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
@@ -416,6 +586,26 @@ export default function CustomersView({
                     <Sliders className="size-3.5" />
                     Hạn mức
                   </button>
+                  {c.currentDebt > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCollectCustomer(c)}
+                      className="flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
+                      title="Lập phiếu thu tiền / Gạch nợ"
+                    >
+                      <Receipt className="size-3.5 text-emerald-700" />
+                      Thu nợ
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setZaloCustomer(c)}
+                    className="flex cursor-pointer items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+                    title="Gửi Zalo đối soát nợ & sổ vỏ phuy"
+                  >
+                    <MessageCircle className="size-3.5 text-blue-600" />
+                    Zalo
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -432,12 +622,44 @@ export default function CustomersView({
                     <Trash2 className="size-3.5" />
                     Xóa
                   </button>
+                  {isHardLocked && (
+                    <button
+                      type="button"
+                      onClick={() => onApproveCreditOverride && onApproveCreditOverride(c.id)}
+                      className="flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
+                      title="Admin: Phê duyệt nhanh vượt trần nợ cho khách này"
+                    >
+                      <ShieldCheck className="size-3.5 text-emerald-700" />
+                      <span>Duyệt Admin</span>
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => onNavigateToSales(c.id)}
-                    className="ml-auto flex cursor-pointer items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400"
+                    onClick={() => {
+                      if (isHardLocked) {
+                        setSelectedLockedCustomer(c);
+                        setShowCreditLockModal(true);
+                      } else {
+                        onNavigateToSales(c.id);
+                      }
+                    }}
+                    className={`ml-auto flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                      isHardLocked
+                        ? "bg-rose-100 text-rose-800 border border-rose-300 hover:bg-rose-200"
+                        : c.creditOverridden
+                          ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-2xs"
+                          : "bg-amber-500 text-slate-950 hover:bg-amber-400"
+                    }`}
+                    title={
+                      isHardLocked
+                        ? `Quá hạn ${c.debtAging?.maxOverdueDays || 122}d - Khóa cứng lên đơn (Cần ADMIN duyệt)`
+                        : c.creditOverridden
+                          ? "Đã duyệt ngoại lệ - Lên đơn"
+                          : "Lên đơn"
+                    }
                   >
-                    Lên đơn
+                    {isHardLocked && <Lock className="size-3.5 text-rose-700" />}
+                    <span>{isHardLocked ? "Khóa Nợ" : "Lên đơn"}</span>
                     <ArrowRight className="size-3.5" />
                   </button>
                 </div>
@@ -521,22 +743,41 @@ export default function CustomersView({
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700">
-                  Hạn mức công nợ (VNĐ)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={form.creditLimit}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      creditLimit: Number(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs font-bold"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Hạn mức nợ (VNĐ)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.creditLimit}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        creditLimit: Number(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">
+                    Hạn nợ tối đa (Ngày)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.creditTermDays ?? 30}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        creditTermDays: Number(e.target.value) || 30,
+                      })
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs font-bold"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -609,6 +850,166 @@ export default function CustomersView({
                 className="rounded-xl bg-amber-500 px-5 py-2 text-xs font-bold text-slate-950"
               >
                 Lưu hạn mức
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedCollectCustomer && (
+        <CollectDebtModal
+          customer={selectedCollectCustomer}
+          isOpen={Boolean(selectedCollectCustomer)}
+          onClose={() => setSelectedCollectCustomer(null)}
+          onSuccess={(customerId, amount) => {
+            onPayDebt?.(customerId, amount);
+          }}
+        />
+      )}
+
+      {/* 1-Click Zalo Direct Chat Notification Modal */}
+      <ZaloShareModal
+        isOpen={Boolean(zaloCustomer)}
+        onClose={() => setZaloCustomer(null)}
+        customer={zaloCustomer}
+        initialTemplate="debt"
+      />
+
+      {/* Sequence Diagram: Credit Hard-Lock Modal for Overdue / Over-limit Customers */}
+      {showCreditLockModal && selectedLockedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg space-y-4 rounded-2xl border border-rose-300 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between border-b border-rose-100 pb-3">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-rose-100 p-2.5 text-rose-700">
+                  <AlertOctagon className="size-6" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-extrabold uppercase">
+                    Chính sách tín dụng B2B
+                  </div>
+                  <h3 className="font-display text-base sm:text-lg font-black text-rose-950 mt-0.5">
+                    CẢNH BÁO NỢ QUÁ HẠN — KHÓA CỨNG LÊN ĐƠN
+                  </h3>
+                  <p className="text-xs text-rose-700">
+                    Khách hàng: <strong>{selectedLockedCustomer.name}</strong> ({selectedLockedCustomer.phone || "Chưa có SĐT"})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreditLockModal(false);
+                  setSelectedLockedCustomer(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            {/* Chi tiết vi phạm công nợ */}
+            <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 space-y-2.5 text-xs text-rose-900">
+              <div className="flex justify-between">
+                <span>Dư nợ hiện tại:</span>
+                <strong className="font-mono text-sm text-rose-950 font-black">
+                  {formatVND(selectedLockedCustomer.currentDebt)}
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Hạn mức tín dụng được cấp:</span>
+                <span className="font-mono font-semibold">
+                  {formatVND(selectedLockedCustomer.creditLimit)}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-rose-200 pt-2 font-bold text-rose-950">
+                <span>Tình trạng tuổi nợ:</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600 text-white font-mono font-black text-xs">
+                  Quá hạn {selectedLockedCustomer.debtAging?.maxOverdueDays || 122} ngày
+                </span>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <p className="font-bold text-slate-800 mb-1">Quy định phê duyệt nợ (Credit Approval Loop):</p>
+              <p>
+                Hệ thống tự động khóa tính năng lên đơn mới trên PWA và Desktop nhằm phòng ngừa nợ xấu.
+                Để tiếp tục lên đơn, Sales phải gửi yêu cầu <strong>Phê Duyệt Vượt Trần (Credit Override)</strong> tới <strong>Ban Giám Đốc (ADMIN)</strong>.
+              </p>
+            </div>
+
+            {/* Form xin duyệt vượt trần */}
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Lý do xin bảo lãnh / vượt trần ngoại lệ:
+                </label>
+                <textarea
+                  rows={2}
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  placeholder="Nhập cam kết thanh toán hoặc lý do cấp bách của khách..."
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-900 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Số tiền đơn hàng dự kiến xin duyệt (VNĐ):
+                </label>
+                <input
+                  type="number"
+                  value={overrideAmount}
+                  onChange={(e) => setOverrideAmount(Number(e.target.value))}
+                  className="w-full rounded-xl border border-slate-300 p-2 font-mono font-bold text-xs text-slate-900 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreditLockModal(false);
+                  setSelectedLockedCustomer(null);
+                }}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onRequestCreditOverride) {
+                    onRequestCreditOverride(
+                      selectedLockedCustomer.id,
+                      overrideReason,
+                      overrideAmount
+                    );
+                  }
+                  soundFX.playSuccess();
+                  setShowCreditLockModal(false);
+                  setSelectedLockedCustomer(null);
+                }}
+                className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 shadow-xs cursor-pointer"
+              >
+                <Send className="size-3.5" />
+                <span>Gửi Yêu Cầu Duyệt Vượt Trần Tới ADMIN</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onApproveCreditOverride) {
+                    onApproveCreditOverride(selectedLockedCustomer.id);
+                  }
+                  setShowCreditLockModal(false);
+                  setSelectedLockedCustomer(null);
+                }}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 shadow-xs cursor-pointer"
+              >
+                <ShieldCheck className="size-3.5" />
+                <span>Admin Duyệt Ngay</span>
               </button>
             </div>
           </div>

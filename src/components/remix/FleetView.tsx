@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useState, FormEvent } from 'react';
 import { FleetVehicle, Customer } from '../types';
 import {
@@ -29,6 +29,7 @@ interface FleetViewProps {
   ) => void;
   onAddVehicle: (newVehicle: FleetVehicle) => void;
   onDeleteVehicle?: (vehicleId: string) => void;
+  onAutoCreateEmergencyOrder?: (vehicle: FleetVehicle) => void;
 }
 
 export default function FleetView({
@@ -38,6 +39,7 @@ export default function FleetView({
   onUpdateVehicleKm,
   onAddVehicle,
   onDeleteVehicle,
+  onAutoCreateEmergencyOrder,
 }: FleetViewProps) {
   // Vehicle edit state
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
@@ -335,18 +337,33 @@ export default function FleetView({
                   )}
                 </div>
 
-                {isOverdue || isWarning ? (
+                {isOverdue ? (
+                  <button
+                    onClick={() => {
+                      if (onAutoCreateEmergencyOrder) {
+                        onAutoCreateEmergencyOrder(v);
+                      } else {
+                        onNavigateToSales(v.customerId);
+                      }
+                    }}
+                    className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer animate-pulse"
+                    title="Tự động tạo đơn hàng khẩn cấp đẩy vào cột Chờ Duyệt bên Kanban"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Tạo Đơn Nhớt Gấp (Auto Kanban)</span>
+                  </button>
+                ) : isWarning ? (
                   <button
                     onClick={() => onNavigateToSales(v.customerId)}
-                    className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                    className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
                   >
-                    <span>Tạo Đơn Nhớt Gấp</span>
+                    <span>Lên Đơn Cảnh Báo</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 ) : (
                   <button
                     onClick={() => onNavigateToSales(v.customerId)}
-                    className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                    className="px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
                   >
                     <span>Lên Đơn Định Kỳ</span>
                     <ArrowRight className="w-3.5 h-3.5" />
