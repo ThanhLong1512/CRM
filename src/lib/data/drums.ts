@@ -42,6 +42,8 @@ export type DrumStats = {
   customersHolding: number;
   totalIssued: number;
   totalReturned: number;
+  issuedMtd: number;
+  returnedMtd: number;
 };
 
 export async function listDrumBalances(): Promise<DrumBalanceDto[]> {
@@ -124,7 +126,17 @@ export async function listDrumCustomers(): Promise<DrumCustomerOption[]> {
 }
 
 export async function getDrumStats(): Promise<DrumStats> {
-  const [agg, issued, returned] = await Promise.all([
+  const mtdStart = new Date(
+    new Date().getFullYear(),
+    new Date().getMonth(),
+    1,
+    0,
+    0,
+    0,
+    0,
+  );
+
+  const [agg, issued, returned, issuedMtd, returnedMtd] = await Promise.all([
     prisma.customer.aggregate({
       _sum: { outstandingDrums: true },
       _count: {
@@ -140,6 +152,14 @@ export async function getDrumStats(): Promise<DrumStats> {
       where: { type: "RETURN" },
       _sum: { quantity: true },
     }),
+    prisma.drumTransaction.aggregate({
+      where: { type: "ISSUE", createdAt: { gte: mtdStart } },
+      _sum: { quantity: true },
+    }),
+    prisma.drumTransaction.aggregate({
+      where: { type: "RETURN", createdAt: { gte: mtdStart } },
+      _sum: { quantity: true },
+    }),
   ]);
 
   return {
@@ -147,5 +167,7 @@ export async function getDrumStats(): Promise<DrumStats> {
     customersHolding: agg._count._all,
     totalIssued: issued._sum.quantity ?? 0,
     totalReturned: returned._sum.quantity ?? 0,
+    issuedMtd: issuedMtd._sum.quantity ?? 0,
+    returnedMtd: returnedMtd._sum.quantity ?? 0,
   };
 }

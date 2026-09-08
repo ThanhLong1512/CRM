@@ -12,6 +12,7 @@ import {
   type StockStatusFilter,
 } from "@/app/(private)/san-pham/product-query";
 import { MasterListSkeleton } from "@/components/features/MasterListSkeleton";
+import { PageHero, StatCard } from "@/components/features/PageHero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -93,76 +94,48 @@ export function ProductsPageClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Sản phẩm</h1>
-          <p className="text-sm text-muted-foreground">
+      <PageHero
+        icon={Package}
+        title="Master Data sản phẩm"
+        description={
+          <>
             Danh mục dầu nhớt và phụ gia
             {isFetching && !isLoading ? " · Đang đồng bộ..." : ""}
-          </p>
-        </div>
-        <CreateProductDialog />
-      </div>
+          </>
+        }
+        actions={<CreateProductDialog />}
+      />
 
-      {/* Summary cards — UI giống mock */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tổng sản phẩm
-            </CardTitle>
-            <Package className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {totalProducts}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Sản phẩm trong hệ thống
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Đang hoạt động
-            </CardTitle>
-            <TrendingUp className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {activeCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Sản phẩm đang hoạt động
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Còn hàng
-            </CardTitle>
-            <Box className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {inStockCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Sản phẩm còn hàng
-            </p>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Tổng sản phẩm"
+          value={totalProducts}
+          hint="SKU trong hệ thống"
+          icon={Package}
+          tone="sky"
+        />
+        <StatCard
+          label="Đang hoạt động"
+          value={activeCount}
+          hint="Có tồn kho > 0"
+          icon={TrendingUp}
+          tone="emerald"
+        />
+        <StatCard
+          label="Còn hàng"
+          value={inStockCount}
+          hint="Sẵn sàng bán"
+          icon={Box}
+          tone="amber"
+        />
       </div>
 
-      {/* Filter panel */}
-      <Card className="bg-background shadow-none ring-1 ring-border/60">
+      <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Bộ lọc</CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <CardTitle className="font-display text-base font-semibold text-slate-900">
+            Bộ lọc
+          </CardTitle>
+          <p className="text-sm text-slate-500">
             Tìm kiếm sản phẩm và lọc theo trạng thái, danh mục
           </p>
         </CardHeader>
@@ -223,11 +196,11 @@ export function ProductsPageClient() {
         </CardContent>
       </Card>
 
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-slate-500">
         Hiển thị {filtered.length} trên tổng số {totalProducts} sản phẩm.
       </p>
 
-      <div className="rounded-lg border border-border bg-background">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
         <Table>
           <TableHeader>
             <TableRow>

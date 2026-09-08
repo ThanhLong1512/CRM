@@ -1,14 +1,7 @@
-import { SalesPageClient } from "@/app/(private)/sales/SalesPageClient";
-import { listTodayCheckIns } from "@/lib/data/check-ins";
-import { listCustomers } from "@/lib/data/customers";
+import { RemixModulePage } from "@/components/remix/RemixModulePage";
 
-export default async function SalesPage() {
-  const [customers, todayCheckIns] = await Promise.all([
-    listCustomers(),
-    listTodayCheckIns(),
-  ]);
+export const dynamic = "force-dynamic";
 
-  return (
-    <SalesPageClient customers={customers} todayCheckIns={todayCheckIns} />
-  );
+export default function SalesPage() {
+  return <RemixModulePage module="sales_pwa" />;
 }

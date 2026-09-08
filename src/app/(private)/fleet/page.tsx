@@ -1,18 +1,7 @@
-import { FleetPageClient } from "@/app/(private)/fleet/FleetPageClient";
-import { listFleetCustomers, listFleetVehicles } from "@/lib/data/fleet";
+import { RemixModulePage } from "@/components/remix/RemixModulePage";
 
 export const dynamic = "force-dynamic";
 
-export default async function FleetPage() {
-  const [vehicles, customers] = await Promise.all([
-    listFleetVehicles(),
-    listFleetCustomers(),
-  ]);
-
-  return (
-    <FleetPageClient
-      vehicles={vehicles}
-      customers={customers.map((c) => ({ id: c.id, name: c.name }))}
-    />
-  );
+export default function FleetPage() {
+  return <RemixModulePage module="fleet" />;
 }

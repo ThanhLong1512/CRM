@@ -11,6 +11,7 @@ export type LoyaltyActionResult = {
   error?: string;
   mechanicId?: string;
   points?: number;
+  awarded?: number;
 };
 
 function fail(message: string): LoyaltyActionResult {
@@ -19,7 +20,7 @@ function fail(message: string): LoyaltyActionResult {
 
 function ok(
   message: string,
-  extra?: { mechanicId?: string; points?: number },
+  extra?: { mechanicId?: string; points?: number; awarded?: number },
 ): LoyaltyActionResult {
   return { success: true, message, ...extra };
 }
@@ -134,6 +135,7 @@ export async function scanLoyaltyCode(input: {
     return ok(`Đã tích +${result.awarded} điểm từ mã ${result.code}.`, {
       mechanicId: result.mechanic.id,
       points: result.mechanic.points,
+      awarded: result.awarded,
     });
   } catch (error) {
     return fail(

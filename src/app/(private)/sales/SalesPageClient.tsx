@@ -2,12 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState, useTransition } from "react";
-import { MapPin, Navigation, RefreshCw } from "lucide-react";
+import { MapPin, Navigation, RefreshCw, Route } from "lucide-react";
 import { toast } from "sonner";
 import { createCheckIn } from "@/app/(private)/sales/actions";
 import type { CheckInDto } from "@/lib/data/check-ins";
 import { CHECK_IN_MAX_DISTANCE_M, haversineMeters } from "@/lib/geo";
 import type { CustomerDto } from "@/app/(private)/khach-hang/customer-query";
+import { PageHero } from "@/components/features/PageHero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +27,7 @@ const CustomerMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-border bg-muted/30 text-sm text-muted-foreground">
+      <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
         Đang tải bản đồ...
       </div>
     ),
@@ -166,44 +167,40 @@ export function SalesPageClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Tuyến Sales & Check-in
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Bản đồ khách hàng có GPS — check-in trong bán kính{" "}
-            {CHECK_IN_MAX_DISTANCE_M}m
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-1.5 self-start sm:self-auto"
-          disabled={locating || pending}
-          onClick={refreshLocation}
-        >
-          <RefreshCw
-            className={`size-4 ${locating ? "animate-spin" : ""}`}
-            aria-hidden
-          />
-          {locating ? "Đang lấy GPS..." : "Lấy vị trí của tôi"}
-        </Button>
-      </div>
+      <PageHero
+        icon={Route}
+        title="Tuyến Sales & Check-in"
+        description={`Bản đồ khách hàng có GPS — check-in trong bán kính ${CHECK_IN_MAX_DISTANCE_M}m`}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5"
+            disabled={locating || pending}
+            onClick={refreshLocation}
+          >
+            <RefreshCw
+              className={`size-4 ${locating ? "animate-spin" : ""}`}
+              aria-hidden
+            />
+            {locating ? "Đang lấy GPS..." : "Lấy vị trí của tôi"}
+          </Button>
+        }
+      />
 
       <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
+        <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">
+            <CardTitle className="font-display text-base font-semibold text-slate-900">
               Khách hàng trên tuyến
             </CardTitle>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-slate-500">
               {geoCustomers.length} điểm có tọa độ
             </p>
           </CardHeader>
           <CardContent className="max-h-[420px] space-y-2 overflow-y-auto p-3 pt-0">
             {geoCustomers.length === 0 ? (
-              <p className="px-1 py-6 text-center text-sm text-muted-foreground">
+              <p className="px-1 py-6 text-center text-sm text-slate-500">
                 Chưa có khách hàng nào gắn lat/lng. Cập nhật trong mục Khách
                 hàng.
               </p>
@@ -215,14 +212,16 @@ export function SalesPageClient({
                     key={customer.id}
                     type="button"
                     onClick={() => setSelectedId(customer.id)}
-                    className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                    className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${
                       active
-                        ? "border-sky-600 bg-sky-50"
-                        : "border-border hover:bg-muted/50"
+                        ? "border-amber-400 bg-amber-50"
+                        : "border-slate-200 hover:bg-slate-50"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-medium">{customer.name}</span>
+                      <span className="font-medium text-slate-900">
+                        {customer.name}
+                      </span>
                       <Badge
                         variant={
                           customer.type === "FLEET" ? "default" : "secondary"
@@ -231,7 +230,7 @@ export function SalesPageClient({
                         {customer.type}
                       </Badge>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">
                       {customer.address || "Chưa có địa chỉ"}
                     </p>
                   </button>
@@ -242,7 +241,7 @@ export function SalesPageClient({
         </Card>
 
         <div className="space-y-4">
-          <div className="overflow-hidden rounded-lg border border-border bg-background">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
             <CustomerMap
               customers={geoCustomers.map((c) => ({
                 id: c.id,
@@ -259,9 +258,9 @@ export function SalesPageClient({
             />
           </div>
 
-          <Card className="bg-background shadow-none ring-1 ring-border/60">
+          <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold">
+              <CardTitle className="font-display text-base font-semibold text-slate-900">
                 Check-in tại điểm
               </CardTitle>
             </CardHeader>
@@ -269,11 +268,9 @@ export function SalesPageClient({
               <div className="space-y-1 text-sm">
                 {selected ? (
                   <>
-                    <p className="font-medium">{selected.name}</p>
-                    <p className="text-muted-foreground">
-                      {selected.address || "—"}
-                    </p>
-                    <p className="flex items-center gap-1.5 tabular-nums text-muted-foreground">
+                    <p className="font-medium text-slate-900">{selected.name}</p>
+                    <p className="text-slate-500">{selected.address || "—"}</p>
+                    <p className="flex items-center gap-1.5 tabular-nums text-slate-500">
                       <MapPin className="size-3.5" aria-hidden />
                       {selected.lat.toFixed(5)}, {selected.lng.toFixed(5)}
                     </p>
@@ -282,7 +279,7 @@ export function SalesPageClient({
                         className={
                           distanceM <= CHECK_IN_MAX_DISTANCE_M
                             ? "text-emerald-700"
-                            : "text-destructive"
+                            : "text-rose-600"
                         }
                       >
                         Cách bạn: {Math.round(distanceM)}m
@@ -291,13 +288,13 @@ export function SalesPageClient({
                           : " — trong phạm vi"}
                       </p>
                     ) : (
-                      <p className="text-muted-foreground">
+                      <p className="text-slate-500">
                         Bấm “Lấy vị trí của tôi” để tính khoảng cách.
                       </p>
                     )}
                   </>
                 ) : (
-                  <p className="text-muted-foreground">
+                  <p className="text-slate-500">
                     Chọn một khách hàng trên danh sách hoặc bản đồ.
                   </p>
                 )}
@@ -320,12 +317,12 @@ export function SalesPageClient({
         </div>
       </div>
 
-      <Card className="bg-background shadow-none ring-1 ring-border/60">
+      <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">
+          <CardTitle className="font-display text-base font-semibold text-slate-900">
             Check-in hôm nay
           </CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-slate-500">
             {checkIns.length} lượt ghi nhận
           </p>
         </CardHeader>
@@ -344,7 +341,7 @@ export function SalesPageClient({
                 <TableRow>
                   <TableCell
                     colSpan={4}
-                    className="h-20 text-center text-muted-foreground"
+                    className="h-20 text-center text-slate-500"
                   >
                     Chưa có check-in nào hôm nay.
                   </TableCell>
@@ -352,13 +349,13 @@ export function SalesPageClient({
               ) : (
                 checkIns.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell className="tabular-nums text-muted-foreground">
+                    <TableCell className="tabular-nums text-slate-500">
                       {new Date(row.createdAt).toLocaleTimeString("vi-VN")}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium text-slate-900">
                       {row.customerName}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-slate-500">
                       {row.userName || row.userEmail || "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">

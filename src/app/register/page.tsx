@@ -1,9 +1,11 @@
-import { RegisterForm } from "@/app/register/register-form";
+import AuthScreen from "@/components/auth/AuthScreen";
+import { listQuickLoginUsers } from "@/lib/auth/quick-login-users";
 
-export default function RegisterPage() {
+export const dynamic = "force-dynamic";
+
+export default async function RegisterPage() {
+  const quickLoginUsers = await listQuickLoginUsers();
   return (
-    <main className="flex min-h-screen flex-1 items-center justify-center bg-muted/40 px-4 py-12">
-      <RegisterForm />
-    </main>
+    <AuthScreen initialMode="register" quickLoginUsers={quickLoginUsers} />
   );
 }

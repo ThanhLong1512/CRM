@@ -20,6 +20,7 @@ import {
   type CustomerTypeFilter,
 } from "@/app/(private)/khach-hang/customer-query";
 import { MasterListSkeleton } from "@/components/features/MasterListSkeleton";
+import { PageHero, StatCard } from "@/components/features/PageHero";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -84,91 +85,55 @@ export function CustomersPageClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Khách hàng</h1>
-          <p className="text-sm text-muted-foreground">
+      <PageHero
+        icon={Users}
+        title="Khách hàng & công nợ"
+        description={
+          <>
             Quản lý garage và đội xe
             {isFetching && !isLoading ? " · Đang đồng bộ..." : ""}
-          </p>
-        </div>
-        <CreateCustomerButton />
-      </div>
+          </>
+        }
+        actions={<CreateCustomerButton />}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tổng khách hàng
-            </CardTitle>
-            <Users className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {totalCustomers}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Khách hàng trong hệ thống
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Garage
-            </CardTitle>
-            <Warehouse className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {garageCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Đại lý / tiệm sửa xe
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Đội xe
-            </CardTitle>
-            <Truck className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {fleetCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Khách hàng FLEET
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Gần hạn mức
-            </CardTitle>
-            <AlertTriangle className="size-4 text-amber-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-amber-700">
-              {nearLimitCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Dư nợ ≥ 80% hạn mức
-            </p>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Tổng khách hàng"
+          value={totalCustomers}
+          hint="Trong hệ thống"
+          icon={Users}
+          tone="sky"
+        />
+        <StatCard
+          label="Garage"
+          value={garageCount}
+          hint="Đại lý / tiệm sửa xe"
+          icon={Warehouse}
+          tone="emerald"
+        />
+        <StatCard
+          label="Đội xe"
+          value={fleetCount}
+          hint="Khách hàng FLEET"
+          icon={Truck}
+          tone="violet"
+        />
+        <StatCard
+          label="Gần hạn mức"
+          value={nearLimitCount}
+          hint="Dư nợ ≥ 80% hạn mức"
+          icon={AlertTriangle}
+          tone="rose"
+        />
       </div>
 
-      <Card className="bg-background shadow-none ring-1 ring-border/60">
+      <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Bộ lọc</CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <CardTitle className="font-display text-base font-semibold text-slate-900">
+            Bộ lọc
+          </CardTitle>
+          <p className="text-sm text-slate-500">
             Tìm kiếm khách hàng và lọc theo phân loại, trạng thái công nợ
           </p>
         </CardHeader>
@@ -228,11 +193,11 @@ export function CustomersPageClient() {
         </CardContent>
       </Card>
 
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-slate-500">
         Hiển thị {filtered.length} trên tổng số {totalCustomers} khách hàng.
       </p>
 
-      <div className="rounded-lg border border-border bg-background">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
         <Table>
           <TableHeader>
             <TableRow>

@@ -1,22 +1,18 @@
 import type { ReactNode } from "react";
-import { AdminShell } from "@/components/features/AdminShell";
-import { getSessionDbUser, resolveUserRole } from "@/lib/auth";
+import { Suspense } from "react";
+import { LoginSuccessToast } from "@/components/auth/LoginSuccessToast";
 
-export default async function PrivateLayout({
+export default function PrivateLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const { dbUser } = await getSessionDbUser();
-  const userRole = resolveUserRole(dbUser);
-
   return (
-    <AdminShell
-      userRole={userRole}
-      userName={dbUser?.name}
-      userEmail={dbUser?.email}
-    >
+    <div className="min-h-screen bg-slate-50">
+      <Suspense fallback={null}>
+        <LoginSuccessToast />
+      </Suspense>
       {children}
-    </AdminShell>
+    </div>
   );
 }

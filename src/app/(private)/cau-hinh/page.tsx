@@ -1,20 +1,7 @@
-import { redirect } from "next/navigation";
-import { getSessionDbUser, isAdminRole, resolveUserRole } from "@/lib/auth";
+import { RemixModulePage } from "@/components/remix/RemixModulePage";
 
-export default async function CauHinhPage() {
-  const { dbUser } = await getSessionDbUser();
-  const role = resolveUserRole(dbUser);
+export const dynamic = "force-dynamic";
 
-  if (!isAdminRole(role)) {
-    redirect("/dashboard");
-  }
-
-  return (
-    <div className="space-y-2">
-      <h1 className="text-2xl font-semibold tracking-tight">Cấu hình</h1>
-      <p className="text-muted-foreground">
-        Cấu hình hệ thống CRM / DMS — placeholder.
-      </p>
-    </div>
-  );
+export default function CauHinhPage() {
+  return <RemixModulePage module="settings" />;
 }

@@ -106,8 +106,25 @@ Until then, **`db push`** against the production `DIRECT_URL` / `DATABASE_URL` i
 ### Auth / users on production
 
 - Enable Email (or your chosen) auth providers in the **production** Supabase project.
-- Ensure site URL / redirect URLs include your Vercel domain, e.g. `https://your-app.vercel.app/**`.
-- App users must exist in both Supabase Auth **and** the Prisma `User` table (email match) for role-aware features — create staff rows via your existing register/staff flow or seed carefully.
+- Ensure site URL / redirect URLs include your Vercel domain **and** password-recovery callback:
+  - `https://your-app.vercel.app/**`
+  - `https://your-app.vercel.app/dat-lai-mat-khau`
+  - Local: `http://localhost:3020/dat-lai-mat-khau`
+- Optional env: `NEXT_PUBLIC_SITE_URL=https://your-app.vercel.app` (used for reset-password email links).
+- App users must exist in both Supabase Auth **and** the Prisma `User` table (email match) for role-aware features — create staff rows via register flow or seed.
+
+**Demo quick-login accounts** (seeded into Prisma by `npm run db:seed`; password `123456`):
+
+| Email | Prisma role |
+|-------|-------------|
+| `sales.anv@remixoil.vn` | `SALES` |
+| `ketoan.btt@remixoil.vn` | `ACCOUNTANT` |
+| `admin.thang@remixoil.vn` | `ADMIN` |
+
+- Seed (`npm run db:seed`) upserts Prisma users **and** ensures Supabase Auth accounts (password `123456`): uses `SUPABASE_SERVICE_ROLE_KEY` if set, otherwise `signUp` via the anon key.
+- Quick-login on `/login` only shows cards for demo emails that **already exist in Prisma**.
+
+Private routes (`/dashboard`, `/khach-hang`, …) redirect to `/login` when unauthenticated.
 
 ---
 

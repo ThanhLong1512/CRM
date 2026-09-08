@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { UserRole } from "@prisma/client";
 import {
-  Home,
+  LayoutDashboard,
   Users,
   ClipboardList,
   Truck,
@@ -31,25 +31,27 @@ export const navGroups: NavGroup[] = [
   {
     id: "tong-quan",
     label: "Tổng quan",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: Home }],
+    items: [
+      { href: "/dashboard", label: "Dashboard & RFM", icon: LayoutDashboard },
+    ],
   },
   {
     id: "kinh-doanh",
-    label: "Kinh doanh",
+    label: "Kinh doanh & Thực địa",
     items: [
-      { href: "/khach-hang", label: "Khách hàng", icon: Users },
-      { href: "/don-hang", label: "Đơn hàng", icon: ClipboardList },
-      { href: "/fleet", label: "Đội xe", icon: Truck },
-      { href: "/sales", label: "Tuyến Sales", icon: Route },
-      { href: "/tich-diem", label: "Tích điểm", icon: Gift },
+      { href: "/khach-hang", label: "Khách hàng & Công nợ", icon: Users },
+      { href: "/don-hang", label: "Đơn hàng & Kanban", icon: ClipboardList },
+      { href: "/fleet", label: "Đội xe & Bảo dưỡng", icon: Truck },
+      { href: "/sales", label: "Tuyến Sales & Check-in", icon: Route },
+      { href: "/tich-diem", label: "Tích điểm thợ máy", icon: Gift },
     ],
   },
   {
     id: "kho",
     label: "Kho & Hàng hóa",
     items: [
-      { href: "/san-pham", label: "Sản phẩm", icon: Package },
-      { href: "/vo-phuy", label: "Vỏ phuy", icon: Cylinder },
+      { href: "/san-pham", label: "Master Data sản phẩm", icon: Package },
+      { href: "/vo-phuy", label: "Quản lý vỏ phuy", icon: Cylinder },
     ],
   },
   {
@@ -65,7 +67,7 @@ export const navGroups: NavGroup[] = [
       },
       {
         href: "/cau-hinh",
-        label: "Cấu hình",
+        label: "Cấu hình hệ thống",
         icon: Settings,
         requiresAdmin: true,
       },

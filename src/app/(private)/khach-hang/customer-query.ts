@@ -6,6 +6,7 @@ export type CustomerDto = {
   type: "GARAGE" | "FLEET";
   creditLimit: number;
   currentDebt: number;
+  outstandingDrums: number;
   lat: number | null;
   lng: number | null;
   createdAt?: string;

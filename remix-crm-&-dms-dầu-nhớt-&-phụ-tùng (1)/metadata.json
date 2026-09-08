@@ -1,0 +1,10 @@
+{
+  "name": "Remix CRM \u0026 DMS Dầu Nhớt \u0026 Phụ Tùng",
+  "description": "Hệ thống quản lý phân phối \u0026 quan hệ khách hàng chuyên ngành Dầu Nhớt \u0026 Phụ Tùng Ô tô",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -3,12 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
   filterNavGroups,
   isNavActive,
 } from "@/components/features/nav-config";
@@ -17,86 +11,62 @@ import { cn } from "@/lib/utils";
 type SidebarNavProps = {
   userRole: string;
   variant?: "desktop" | "mobile";
+  onNavigate?: () => void;
 };
 
 export function SidebarNav({
   userRole,
   variant = "desktop",
+  onNavigate,
 }: SidebarNavProps) {
   const pathname = usePathname();
   const groups = filterNavGroups(userRole);
 
-  if (variant === "mobile") {
-    return (
-      <nav className="flex gap-1 overflow-x-auto px-3 py-2">
-        {groups.flatMap((group) =>
-          group.items.map((item) => {
-            const Icon = item.icon;
-            const active = isNavActive(pathname, item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <Icon className="size-3.5" aria-hidden />
-                {item.label}
-              </Link>
-            );
-          }),
-        )}
-      </nav>
-    );
+  if (variant === "mobile" && !onNavigate) {
+    // Legacy horizontal strip unused when shell uses drawer
+    return null;
   }
 
   return (
-    <nav className="flex flex-1 flex-col overflow-y-auto p-2">
-      <Accordion
-        multiple
-        defaultValue={groups.map((group) => group.id)}
-        className="gap-1"
-      >
-        {groups.map((group) => (
-          <AccordionItem
-            key={group.id}
-            value={group.id}
-            className="border-none"
-          >
-            <AccordionTrigger className="px-2 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase hover:no-underline hover:text-foreground">
-              {group.label}
-            </AccordionTrigger>
-            <AccordionContent className="pb-1">
-              <ul className="flex flex-col gap-0.5 pl-0.5">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = isNavActive(pathname, item.href);
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        className={cn(
-                          "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
-                          active
-                            ? "bg-primary text-primary-foreground shadow-sm"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                        )}
-                      >
-                        <Icon className="size-4 shrink-0" aria-hidden />
-                        <span className="truncate">{item.label}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </AccordionContent>
-          </AccordionItem>
-        ))}
-      </Accordion>
+    <nav className="flex flex-1 flex-col space-y-4 overflow-y-auto p-3">
+      {groups.map((group) => (
+        <div key={group.id} className="space-y-1">
+          <div className="px-3 text-[10px] font-bold tracking-wider text-slate-500 uppercase">
+            {group.label}
+          </div>
+          <ul className="space-y-0.5">
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const active = isNavActive(pathname, item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={onNavigate}
+                    className={cn(
+                      "group flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all",
+                      active
+                        ? "bg-amber-500 font-bold text-slate-950 shadow-sm"
+                        : "text-slate-300 hover:bg-slate-800/80 hover:text-white",
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        "size-4 shrink-0 transition-colors",
+                        active
+                          ? "text-slate-950"
+                          : "text-slate-400 group-hover:text-amber-400",
+                      )}
+                      aria-hidden
+                    />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
     </nav>
   );
 }

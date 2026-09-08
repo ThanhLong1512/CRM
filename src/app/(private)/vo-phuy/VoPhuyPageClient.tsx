@@ -17,6 +17,7 @@ import type {
   DrumProductOption,
   DrumStats,
 } from "@/lib/data/drums";
+import { PageHero, StatCard } from "@/components/features/PageHero";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -103,80 +104,51 @@ export function VoPhuyPageClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Quản lý vỏ phuy
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Theo dõi số lượng vỏ xuất đi và thu hồi theo từng khách hàng
-          </p>
-        </div>
-        <IssueDrumDialog
-          customers={customers}
-          products={products}
-          onChanged={refresh}
+      <PageHero
+        icon={Cylinder}
+        title="Quản lý vỏ phuy"
+        description="Theo dõi số lượng vỏ xuất đi và thu hồi theo từng khách hàng"
+        actions={
+          <IssueDrumDialog
+            customers={customers}
+            products={products}
+            onChanged={refresh}
+          />
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Vỏ đang ngoài"
+          value={stats.totalOutstanding}
+          icon={Cylinder}
+          tone="sky"
+        />
+        <StatCard
+          label="KH đang giữ"
+          value={stats.customersHolding}
+          icon={Users}
+          tone="amber"
+        />
+        <StatCard
+          label="Tổng xuất"
+          value={stats.totalIssued}
+          icon={ArrowUpFromLine}
+          tone="rose"
+        />
+        <StatCard
+          label="Tổng thu"
+          value={stats.totalReturned}
+          icon={ArrowDownToLine}
+          tone="emerald"
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Vỏ đang ngoài
-            </CardTitle>
-            <Cylinder className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {stats.totalOutstanding}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              KH đang giữ
-            </CardTitle>
-            <Users className="size-4 text-amber-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-amber-700">
-              {stats.customersHolding}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tổng xuất
-            </CardTitle>
-            <ArrowUpFromLine className="size-4 text-red-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-red-700">
-              {stats.totalIssued}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tổng thu
-            </CardTitle>
-            <ArrowDownToLine className="size-4 text-emerald-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-emerald-700">
-              {stats.totalReturned}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="bg-background shadow-none ring-1 ring-border/60">
+      <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Bộ lọc</CardTitle>
+          <CardTitle className="font-display text-base font-semibold text-slate-900">
+            Bộ lọc
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-3 lg:flex-row">
@@ -213,11 +185,11 @@ export function VoPhuyPageClient({
         </CardContent>
       </Card>
 
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-slate-500">
         Hiển thị {filtered.length} / {balances.length} khách hàng.
       </p>
 
-      <div className="rounded-lg border border-border bg-background">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
         <Table>
           <TableHeader>
             <TableRow>

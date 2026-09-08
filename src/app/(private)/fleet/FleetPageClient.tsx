@@ -15,6 +15,7 @@ import {
   fleetLevelLabel,
   type FleetAlertLevel,
 } from "@/lib/fleet-status";
+import { PageHero, StatCard } from "@/components/features/PageHero";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -96,79 +97,50 @@ export function FleetPageClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Đội xe & Bảo dưỡng
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Theo dõi đầu xe FLEET và cảnh báo thay nhớt (Đỏ / Vàng / Xanh)
-          </p>
-        </div>
-        <CreateVehicleDialog customers={customers} onChanged={refresh} />
-      </div>
+      <PageHero
+        icon={Truck}
+        title="Đội xe & bảo dưỡng"
+        description="Theo dõi đầu xe FLEET và cảnh báo thay nhớt (Đỏ / Vàng / Xanh)"
+        actions={
+          <CreateVehicleDialog customers={customers} onChanged={refresh} />
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tổng đầu xe
-            </CardTitle>
-            <Truck className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {vehicles.length}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Đèn đỏ
-            </CardTitle>
-            <AlertTriangle className="size-4 text-red-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-red-700">
-              {redCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">≤ 10% chu kỳ</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Đèn vàng
-            </CardTitle>
-            <AlertTriangle className="size-4 text-amber-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-amber-700">
-              {yellowCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">10–25% chu kỳ</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Đèn xanh
-            </CardTitle>
-            <CheckCircle2 className="size-4 text-emerald-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-emerald-700">
-              {greenCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">&gt; 25% chu kỳ</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Tổng đầu xe"
+          value={vehicles.length}
+          icon={Truck}
+          tone="sky"
+        />
+        <StatCard
+          label="Đèn đỏ"
+          value={redCount}
+          hint="≤ 10% chu kỳ"
+          icon={AlertTriangle}
+          tone="rose"
+        />
+        <StatCard
+          label="Đèn vàng"
+          value={yellowCount}
+          hint="10–25% chu kỳ"
+          icon={AlertTriangle}
+          tone="amber"
+        />
+        <StatCard
+          label="Đèn xanh"
+          value={greenCount}
+          hint="> 25% chu kỳ"
+          icon={CheckCircle2}
+          tone="emerald"
+        />
       </div>
 
-      <Card className="bg-background shadow-none ring-1 ring-border/60">
+      <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Bộ lọc</CardTitle>
+          <CardTitle className="font-display text-base font-semibold text-slate-900">
+            Bộ lọc
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-3 lg:flex-row">
@@ -226,11 +198,11 @@ export function FleetPageClient({
         </CardContent>
       </Card>
 
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-slate-500">
         Hiển thị {filtered.length} / {vehicles.length} đầu xe.
       </p>
 
-      <div className="rounded-lg border border-border bg-background">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
         <Table>
           <TableHeader>
             <TableRow>

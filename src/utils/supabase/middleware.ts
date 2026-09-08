@@ -1,17 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PREFIXES = [
+const PROTECTED_PREFIXES: readonly string[] = [
   "/dashboard",
-  "/san-pham",
   "/khach-hang",
-  "/sales",
-  "/fleet",
-  "/nhan-su",
+  "/san-pham",
   "/don-hang",
-  "/cau-hinh",
+  "/fleet",
+  "/vo-phuy",
   "/tich-diem",
-] as const;
+  "/sales",
+  "/nhan-su",
+  "/cau-hinh",
+];
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
@@ -73,6 +74,8 @@ export async function updateSession(request: NextRequest) {
     });
     return redirectResponse;
   }
+
+  // Allow /dat-lai-mat-khau with or without session (recovery flow)
 
   return supabaseResponse;
 }

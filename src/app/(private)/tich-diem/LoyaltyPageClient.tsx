@@ -3,13 +3,14 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Gift, QrCode, UserRound } from "lucide-react";
+import { Gift, QrCode, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import {
   findOrCreateMechanic,
   redeemReward,
   scanLoyaltyCode,
 } from "@/app/(private)/tich-diem/actions";
+import { PageHero } from "@/components/features/PageHero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,7 +31,7 @@ const QRScanner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
         Đang tải camera...
       </div>
     ),
@@ -165,21 +166,17 @@ export function LoyaltyPageClient({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Tích điểm thợ
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Quét QR nắp chai/thùng (mã một lần), cộng điểm và đổi quà chống bán phá
-          giá.
-        </p>
-      </div>
+      <PageHero
+        icon={Sparkles}
+        title="Tích điểm thợ"
+        description="Quét QR nắp chai/thùng (mã một lần), cộng điểm và đổi quà chống bán phá giá."
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
+        <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base font-semibold">
-              <UserRound className="size-4" aria-hidden />
+            <CardTitle className="flex items-center gap-2 font-display text-base font-semibold text-slate-900">
+              <UserRound className="size-4 text-amber-600" aria-hidden />
               Hồ sơ thợ
             </CardTitle>
           </CardHeader>
@@ -212,25 +209,25 @@ export function LoyaltyPageClient({
               {pending ? "Đang lưu..." : "Chọn / tạo thợ"}
             </Button>
             {mechanic ? (
-              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
-                <p className="font-medium">{mechanic.name}</p>
-                <p className="text-muted-foreground">{mechanic.phone}</p>
-                <p className="mt-1 text-lg font-semibold tabular-nums text-sky-700">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                <p className="font-medium text-slate-900">{mechanic.name}</p>
+                <p className="text-slate-500">{mechanic.phone}</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-amber-700">
                   {mechanic.points} điểm
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-slate-500">
                 Chưa chọn thợ — cần tạo hồ sơ trước khi quét.
               </p>
             )}
           </CardContent>
         </Card>
 
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
+        <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base font-semibold">
-              <QrCode className="size-4" aria-hidden />
+            <CardTitle className="flex items-center gap-2 font-display text-base font-semibold text-slate-900">
+              <QrCode className="size-4 text-amber-600" aria-hidden />
               Quét / nhập mã
             </CardTitle>
           </CardHeader>
@@ -256,10 +253,10 @@ export function LoyaltyPageClient({
         </Card>
       </div>
 
-      <Card className="bg-background shadow-none ring-1 ring-border/60">
+      <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold">
-            <Gift className="size-4" aria-hidden />
+          <CardTitle className="flex items-center gap-2 font-display text-base font-semibold text-slate-900">
+            <Gift className="size-4 text-amber-600" aria-hidden />
             Đổi quà
           </CardTitle>
         </CardHeader>
@@ -268,10 +265,10 @@ export function LoyaltyPageClient({
             {rewards.map((reward) => (
               <div
                 key={reward.id}
-                className="flex flex-col rounded-lg border border-border p-3"
+                className="flex flex-col rounded-xl border border-slate-200 bg-slate-50/60 p-3"
               >
-                <p className="font-medium">{reward.name}</p>
-                <p className="mt-1 text-sm tabular-nums text-muted-foreground">
+                <p className="font-medium text-slate-900">{reward.name}</p>
+                <p className="mt-1 text-sm tabular-nums text-slate-500">
                   {reward.pointsCost} điểm · còn {reward.stock}
                 </p>
                 <Button
@@ -294,9 +291,9 @@ export function LoyaltyPageClient({
         </CardContent>
       </Card>
 
-      <Card className="bg-background shadow-none ring-1 ring-border/60">
+      <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">
+          <CardTitle className="font-display text-base font-semibold text-slate-900">
             Lịch sử điểm
           </CardTitle>
         </CardHeader>
@@ -315,7 +312,7 @@ export function LoyaltyPageClient({
                 <TableRow>
                   <TableCell
                     colSpan={4}
-                    className="h-20 text-center text-muted-foreground"
+                    className="h-20 text-center text-slate-500"
                   >
                     Chưa có giao dịch điểm.
                   </TableCell>
@@ -323,7 +320,7 @@ export function LoyaltyPageClient({
               ) : (
                 initialLedger.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell className="tabular-nums text-muted-foreground">
+                    <TableCell className="tabular-nums text-slate-500">
                       {new Date(row.createdAt).toLocaleString("vi-VN")}
                     </TableCell>
                     <TableCell>
@@ -335,12 +332,12 @@ export function LoyaltyPageClient({
                         {row.reason === "SCAN" ? "Quét mã" : "Đổi quà"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-slate-500">
                       {row.note || "—"}
                     </TableCell>
                     <TableCell
                       className={`text-right font-medium tabular-nums ${
-                        row.delta >= 0 ? "text-emerald-700" : "text-destructive"
+                        row.delta >= 0 ? "text-emerald-700" : "text-rose-600"
                       }`}
                     >
                       {row.delta >= 0 ? `+${row.delta}` : row.delta}

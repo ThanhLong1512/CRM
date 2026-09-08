@@ -55,8 +55,8 @@ function OrderCard({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-background p-3 shadow-sm",
-        dragging && "opacity-90 ring-2 ring-sky-500/40",
+        "rounded-xl border border-slate-200 bg-white p-3 shadow-xs",
+        dragging && "opacity-90 ring-2 ring-amber-500/40",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -132,7 +132,7 @@ function KanbanColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex min-h-[420px] w-[280px] shrink-0 flex-col rounded-lg border border-border bg-muted/30",
+        "flex min-h-[420px] w-[280px] shrink-0 flex-col rounded-2xl border border-slate-200 bg-slate-50/80",
         isOver && "border-sky-500/60 bg-sky-50/50",
       )}
     >

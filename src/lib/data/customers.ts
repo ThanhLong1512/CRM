@@ -14,6 +14,7 @@ export async function listCustomers(): Promise<CustomerDto[]> {
     type: customer.type,
     creditLimit: Number(customer.creditLimit),
     currentDebt: Number(customer.currentDebt),
+    outstandingDrums: customer.outstandingDrums,
     lat: customer.lat != null ? Number(customer.lat) : null,
     lng: customer.lng != null ? Number(customer.lng) : null,
     createdAt: customer.createdAt.toISOString(),

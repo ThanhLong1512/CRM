@@ -22,6 +22,7 @@ import {
   type OrderStatusFilter,
 } from "@/app/(private)/don-hang/order-query";
 import { MasterListSkeleton } from "@/components/features/MasterListSkeleton";
+import { PageHero, StatCard } from "@/components/features/PageHero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,121 +104,87 @@ export function OrdersPageClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Đơn hàng</h1>
-          <p className="text-sm text-muted-foreground">
+      <PageHero
+        icon={ClipboardList}
+        title="Đơn hàng & Kanban"
+        description={
+          <>
             Tạo đơn, kiểm soát công nợ và theo dõi trạng thái
             {isFetching && !isLoading ? " · Đang đồng bộ..." : ""}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-lg border border-border p-0.5">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className={cn(
-                "gap-1.5",
-                view === "table" && "bg-muted text-foreground",
-              )}
-              onClick={() => setView("table")}
-            >
-              <LayoutList className="size-4" aria-hidden />
-              Bảng
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className={cn(
-                "gap-1.5",
-                view === "kanban" && "bg-muted text-foreground",
-              )}
-              onClick={() => setView("kanban")}
-            >
-              <Columns3 className="size-4" aria-hidden />
-              Kanban
-            </Button>
-          </div>
-          <CreateOrderDialog />
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <>
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className={cn(
+                  "gap-1.5 rounded-lg",
+                  view === "table" && "bg-amber-500 font-bold text-slate-950 hover:bg-amber-400",
+                )}
+                onClick={() => setView("table")}
+              >
+                <LayoutList className="size-4" aria-hidden />
+                Bảng
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className={cn(
+                  "gap-1.5 rounded-lg",
+                  view === "kanban" && "bg-amber-500 font-bold text-slate-950 hover:bg-amber-400",
+                )}
+                onClick={() => setView("kanban")}
+              >
+                <Columns3 className="size-4" aria-hidden />
+                Kanban
+              </Button>
+            </div>
+            <CreateOrderDialog />
+          </>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Tổng đơn
-            </CardTitle>
-            <ClipboardList className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {totalOrders}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Đơn trong hệ thống
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Chờ duyệt
-            </CardTitle>
-            <Clock3 className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {pendingCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Đơn trạng thái PENDING
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Xuất kho
-            </CardTitle>
-            <CheckCircle2 className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tracking-tight text-sky-700">
-              {confirmedCount}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Đơn trạng thái CONFIRMED
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-background shadow-none ring-1 ring-border/60">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Giá trị đang mở
-            </CardTitle>
-            <Wallet className="size-4 text-sky-600" aria-hidden />
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold tracking-tight text-sky-700 tabular-nums">
-              {vndFormatter.format(activeValue)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Tổng đơn chưa hủy
-            </p>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Tổng đơn"
+          value={totalOrders}
+          hint="Đơn trong hệ thống"
+          icon={ClipboardList}
+          tone="sky"
+        />
+        <StatCard
+          label="Chờ duyệt"
+          value={pendingCount}
+          hint="Trạng thái PENDING"
+          icon={Clock3}
+          tone="orange"
+        />
+        <StatCard
+          label="Xuất kho"
+          value={confirmedCount}
+          hint="Trạng thái CONFIRMED"
+          icon={CheckCircle2}
+          tone="emerald"
+        />
+        <StatCard
+          label="Giá trị đang mở"
+          value={vndFormatter.format(activeValue)}
+          hint="Không gồm đơn hủy"
+          icon={Wallet}
+          tone="amber"
+        />
       </div>
 
-      <Card className="bg-background shadow-none ring-1 ring-border/60">
+      <Card className="rounded-2xl border border-slate-200 bg-white shadow-xs">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Bộ lọc</CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <CardTitle className="font-display text-base font-semibold text-slate-900">
+            Bộ lọc
+          </CardTitle>
+          <p className="text-sm text-slate-500">
             Tìm theo khách hàng, sản phẩm, người tạo
             {view === "table" ? " và lọc trạng thái" : " (Kanban ẩn đơn hủy/nháp)"}
           </p>
@@ -282,7 +249,7 @@ export function OrdersPageClient() {
           <OrdersKanbanBoard orders={filtered} />
         )
       ) : (
-        <div className="rounded-lg border border-border bg-background">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
           <Table>
             <TableHeader>
               <TableRow>

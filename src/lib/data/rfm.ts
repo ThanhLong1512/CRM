@@ -16,6 +16,9 @@ export type RfmCustomerDto = {
   customerId: string;
   customerName: string;
   customerType: "GARAGE" | "FLEET";
+  address: string | null;
+  currentDebt: number;
+  creditLimit: number;
   recencyDays: number;
   frequency: number;
   monetary: number;
@@ -54,7 +57,16 @@ export async function listRfmSegments(): Promise<RfmOverview> {
     select: {
       customerId: true,
       createdAt: true,
-      customer: { select: { id: true, name: true, type: true } },
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          address: true,
+          currentDebt: true,
+          creditLimit: true,
+        },
+      },
       items: { select: { quantity: true, unitPrice: true } },
     },
   });
@@ -63,6 +75,9 @@ export async function listRfmSegments(): Promise<RfmOverview> {
     customerId: string;
     customerName: string;
     customerType: "GARAGE" | "FLEET";
+    address: string | null;
+    currentDebt: number;
+    creditLimit: number;
     lastOrderAt: Date;
     frequency: number;
     monetary: number;
@@ -78,6 +93,9 @@ export async function listRfmSegments(): Promise<RfmOverview> {
         customerId: order.customer.id,
         customerName: order.customer.name,
         customerType: order.customer.type,
+        address: order.customer.address,
+        currentDebt: Number(order.customer.currentDebt),
+        creditLimit: Number(order.customer.creditLimit),
         lastOrderAt: order.createdAt,
         frequency: 1,
         monetary: revenue,
@@ -124,6 +142,9 @@ export async function listRfmSegments(): Promise<RfmOverview> {
       customerId: row.customerId,
       customerName: row.customerName,
       customerType: row.customerType,
+      address: row.address,
+      currentDebt: row.currentDebt,
+      creditLimit: row.creditLimit,
       recencyDays: recencyDays[i],
       frequency: row.frequency,
       monetary: row.monetary,
