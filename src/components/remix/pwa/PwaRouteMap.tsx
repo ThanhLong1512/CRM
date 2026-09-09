@@ -134,9 +134,9 @@ export default function PwaRouteMap({
         attributionControl: false,
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        subdomains: 'abcd',
+        subdomains: 'abc',
       }).addTo(map);
 
       const markerGroup = L.layerGroup().addTo(map);
@@ -148,7 +148,11 @@ export default function PwaRouteMap({
     const map = leafletMapRef.current;
     if (!map) return;
 
+    map.invalidateSize();
     map.flyTo([mapCenterLat, mapCenterLng], 16, { duration: 0.8 });
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
 
     if (markersRef.current) {
       markersRef.current.clearLayers();
