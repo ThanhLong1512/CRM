@@ -30,7 +30,10 @@ import {
   Phone,
   RefreshCw,
   Sparkles,
+  Clock,
+  Copy,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { usePagination } from '../../hooks/usePagination';
 import Pagination from '../common/Pagination';
 
@@ -54,7 +57,7 @@ interface DrumsViewProps {
 const DEPOSIT_PRICE_PER_DRUM = 400000; // 400.000đ per steel drum
 
 type CustomerLedgerFilter = 'ALL' | 'HOLDING' | 'URGENT' | 'CLEARED';
-type TransactionFilter = 'ALL' | 'DELIVERY' | 'RETURN' | 'SIGNED';
+type TransactionFilter = 'ALL' | 'DELIVERY' | 'RETURN' | 'SIGNED' | 'UNSIGNED';
 
 export default function DrumsView({
   customers,
@@ -161,17 +164,54 @@ export default function DrumsView({
     pageSizeOptions: [6, 12, 24],
   });
 
+  const [copiedTxId, setCopiedTxId] = useState<string | null>(null);
+
+  const formatTxCode = (id: string) => {
+    if (!id) return '#VP-000';
+    if (id.startsWith('DT-')) return id;
+    const clean = id.replace(/[^a-zA-Z0-9]/g, '');
+    return `#VP-${clean.slice(-6).toUpperCase()}`;
+  };
+
+  const handleCopyCode = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedTxId(id);
+    soundFX.playClick();
+    toast.success(`Đã sao chép mã giao dịch: ${formatTxCode(id)}`);
+    setTimeout(() => setCopiedTxId(null), 2000);
+  };
+
+  const deliveryTxCount = useMemo(
+    () => localTransactions.filter((t) => (t.delivered || 0) > 0).length,
+    [localTransactions]
+  );
+  const returnTxCount = useMemo(
+    () => localTransactions.filter((t) => (t.returned || 0) > 0).length,
+    [localTransactions]
+  );
+  const signedTxCount = useMemo(
+    () => localTransactions.filter((t) => !!t.signature).length,
+    [localTransactions]
+  );
+  const unsignedTxCount = useMemo(
+    () => localTransactions.filter((t) => !t.signature).length,
+    [localTransactions]
+  );
+
   // Filtered Transactions
   const filteredTransactions = useMemo(() => {
     return localTransactions.filter((tx) => {
       if (txFilter === 'DELIVERY' && (!tx.delivered || tx.delivered <= 0)) return false;
       if (txFilter === 'RETURN' && (!tx.returned || tx.returned <= 0)) return false;
       if (txFilter === 'SIGNED' && !tx.signature) return false;
+      if (txFilter === 'UNSIGNED' && !!tx.signature) return false;
 
       if (!txSearch.trim()) return true;
       const q = txSearch.toLowerCase().trim();
+      const code = formatTxCode(tx.id).toLowerCase();
       return (
         tx.id.toLowerCase().includes(q) ||
+        code.includes(q) ||
         tx.customerName.toLowerCase().includes(q) ||
         (tx.signedBy && tx.signedBy.toLowerCase().includes(q))
       );
@@ -755,8 +795,8 @@ export default function DrumsView({
 
       {/* 4. Main Row: 2-Way Reconciliation Terminal & Live Transaction History */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left 5 Cols: 2-Way Drum Transaction Form */}
-        <div ref={formRef} className="lg:col-span-5 rounded-3xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
+        {/* Left 4-5 Cols: 2-Way Drum Transaction Form */}
+        <div ref={formRef} className="lg:col-span-5 xl:col-span-4 rounded-3xl border border-slate-200 bg-white shadow-sm p-5 sm:p-6 space-y-4">
           <div className="border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <ArrowRightLeft className="w-5 h-5 text-cyan-600" />
@@ -1007,120 +1047,177 @@ export default function DrumsView({
           </form>
         </div>
 
-        {/* Right 7 Cols: Realtime Drum Transactions Log */}
-        <div className="lg:col-span-7 rounded-3xl border border-slate-200 bg-white shadow-sm p-6 flex flex-col justify-between space-y-4">
+        {/* Right 7-8 Cols: Realtime Drum Transactions Log */}
+        <div className="lg:col-span-7 xl:col-span-8 rounded-3xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5 flex flex-col justify-between space-y-4">
           <div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <History className="w-5 h-5 text-slate-600" />
-                  <span>Nhật Ký Luân Chuyển Vỏ Phuy Sắt 200L</span>
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Lịch sử các lượt giao nhận, thu hồi và chữ ký số xác thực e-PoD
-                </p>
+            {/* Header with Title & Search */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="size-9 rounded-xl bg-cyan-100 border border-cyan-300 text-cyan-900 flex items-center justify-center shrink-0 shadow-2xs">
+                  <History className="w-5 h-5 text-cyan-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 leading-tight">
+                    Nhật Ký Luân Chuyển Vỏ Phuy Sắt 200L
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Lịch sử các lượt giao nhận, cấn trừ tiền cọc và chữ ký số xác thực e-PoD
+                  </p>
+                </div>
               </div>
 
               {/* Transaction Search */}
-              <div className="relative w-full sm:w-52">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+              <div className="relative w-full sm:w-56">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Mã GD, tên khách..."
+                  placeholder="Mã GD, tên khách, người ký..."
                   value={txSearch}
                   onChange={(e) => setTxSearch(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-cyan-600"
+                  className="w-full pl-8.5 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600 bg-slate-50/50"
                 />
               </div>
             </div>
 
             {/* Filter Tabs for Transactions */}
-            <div className="flex flex-wrap items-center gap-1.5 my-3">
-              <button
-                onClick={() => setTxFilter('ALL')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
-                  txFilter === 'ALL'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Tất cả ({localTransactions.length})
-              </button>
-              <button
-                onClick={() => setTxFilter('DELIVERY')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
-                  txFilter === 'DELIVERY'
-                    ? 'bg-cyan-700 text-white'
-                    : 'bg-cyan-50 text-cyan-900 hover:bg-cyan-100'
-                }`}
-              >
-                Giao mới (+)
-              </button>
-              <button
-                onClick={() => setTxFilter('RETURN')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
-                  txFilter === 'RETURN'
-                    ? 'bg-emerald-700 text-white'
-                    : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
-                }`}
-              >
-                Thu hồi (-)
-              </button>
-              <button
-                onClick={() => setTxFilter('SIGNED')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
-                  txFilter === 'SIGNED'
-                    ? 'bg-purple-700 text-white'
-                    : 'bg-purple-50 text-purple-900 hover:bg-purple-100'
-                }`}
-              >
-                Đã ký e-PoD
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 my-3.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  onClick={() => setTxFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    txFilter === 'ALL'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Tất cả ({localTransactions.length})
+                </button>
+                <button
+                  onClick={() => setTxFilter('DELIVERY')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    txFilter === 'DELIVERY'
+                      ? 'bg-cyan-700 text-white shadow-2xs'
+                      : 'bg-cyan-50 text-cyan-900 hover:bg-cyan-100'
+                  }`}
+                >
+                  Giao mới (+{deliveryTxCount})
+                </button>
+                <button
+                  onClick={() => setTxFilter('RETURN')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    txFilter === 'RETURN'
+                      ? 'bg-emerald-700 text-white shadow-2xs'
+                      : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+                  }`}
+                >
+                  Thu hồi (-{returnTxCount})
+                </button>
+                <button
+                  onClick={() => setTxFilter('SIGNED')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    txFilter === 'SIGNED'
+                      ? 'bg-purple-700 text-white shadow-2xs'
+                      : 'bg-purple-50 text-purple-900 hover:bg-purple-100'
+                  }`}
+                >
+                  Đã ký e-PoD ({signedTxCount})
+                </button>
+                <button
+                  onClick={() => setTxFilter('UNSIGNED')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    txFilter === 'UNSIGNED'
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'bg-amber-50 text-amber-900 hover:bg-amber-100'
+                  }`}
+                >
+                  Chưa ký ({unsignedTxCount})
+                </button>
+              </div>
+
+              <div className="hidden xl:block text-[11px] font-medium text-slate-400">
+                Hiển thị {paginatedTransactions.length} / {filteredTransactions.length} giao dịch
+              </div>
             </div>
 
             {/* Mobile Transactions Cards */}
-            <div className="md:hidden space-y-2.5">
+            <div className="md:hidden space-y-3">
               {paginatedTransactions.length === 0 ? (
-                <div className="py-6 text-center text-slate-400 text-xs">
-                  Không có giao dịch nào phù hợp.
+                <div className="py-8 text-center text-slate-400 text-xs">
+                  Không tìm thấy giao dịch nào phù hợp.
                 </div>
               ) : (
                 paginatedTransactions.map((tx) => (
                   <div
                     key={tx.id}
-                    className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-2"
+                    className="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-2.5 shadow-2xs"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="min-w-0">
-                        <span className="font-mono text-xs font-bold text-slate-500">#{tx.id}</span>
-                        <h4 className="font-bold text-slate-900 text-xs truncate mt-0.5">{tx.customerName}</h4>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCode(tx.id)}
+                          className="font-mono font-bold text-xs text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md flex items-center gap-1"
+                        >
+                          <span>{formatTxCode(tx.id)}</span>
+                          {copiedTxId === tx.id ? (
+                            <Check className="w-3 h-3 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3 h-3 text-slate-400" />
+                          )}
+                        </button>
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {tx.timestamp}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono text-slate-400 shrink-0">{tx.timestamp}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-xl bg-white p-2.5 border border-slate-100 text-xs">
-                      <div className="flex items-center gap-3 font-mono">
-                        <span className="text-cyan-800 font-bold">Giao: {tx.delivered > 0 ? `+${tx.delivered}` : '-'}</span>
-                        <span className="text-emerald-800 font-bold">Thu: {tx.returned > 0 ? `-${tx.returned}` : '-'}</span>
-                      </div>
-                      <div className="font-extrabold text-slate-900 font-mono">
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                          tx.balanceAfter === 0
+                            ? 'bg-slate-100 text-slate-600'
+                            : 'bg-amber-100 text-amber-950'
+                        }`}
+                      >
                         Tồn: {tx.balanceAfter} vỏ
-                      </div>
+                      </span>
                     </div>
 
-                    <div className="pt-0.5">
+                    <div className="font-bold text-slate-900 text-xs">
+                      {tx.customerName}
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl bg-slate-50 p-2 border border-slate-100 text-xs">
+                      <div className="flex items-center gap-2">
+                        {tx.delivered > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-50 border border-cyan-200 text-cyan-900 font-bold text-xs">
+                            <ArrowUpRight className="w-3 h-3 text-cyan-700" />
+                            +{tx.delivered} Giao
+                          </span>
+                        )}
+                        {tx.returned > 0 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-xs">
+                            <ArrowDownLeft className="w-3 h-3 text-emerald-700" />
+                            -{tx.returned} Thu
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Cọc: {formatVND(tx.balanceAfter * DEPOSIT_PRICE_PER_DRUM)}
+                      </span>
+                    </div>
+
+                    <div className="pt-1 flex items-center justify-end">
                       {tx.signature ? (
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5 text-emerald-800 min-w-0">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span className="font-semibold truncate text-[11px]">{tx.signedBy || 'Đã ký e-PoD'}</span>
-                          </div>
+                        <div className="flex items-center justify-between w-full">
+                          <span className="inline-flex items-center gap-1 text-emerald-800 text-[11px] font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            {tx.signedBy || 'Đã ký e-PoD'}
+                          </span>
                           <button
                             type="button"
                             onClick={() => setViewingProofTx(tx)}
-                            className="text-[11px] font-bold text-cyan-700 hover:underline cursor-pointer shrink-0 ml-2"
+                            className="text-xs font-bold text-cyan-700 hover:underline"
                           >
-                            Xem e-PoD
+                            Xem chứng từ →
                           </button>
                         </div>
                       ) : (
@@ -1136,9 +1233,9 @@ export default function DrumsView({
                             clearCanvas();
                             setShowSignatureModal(true);
                           }}
-                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-cyan-900 text-xs font-bold cursor-pointer"
+                          className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold shadow-xs cursor-pointer"
                         >
-                          <PenTool className="w-3 h-3" />
+                          <PenTool className="w-3.5 h-3.5" />
                           <span>Ký nhận e-PoD</span>
                         </button>
                       )}
@@ -1152,58 +1249,108 @@ export default function DrumsView({
             <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-50 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
-                    <th className="py-2.5 px-3">Mã GD</th>
-                    <th className="py-2.5 px-3">Điểm Bán / Garage</th>
-                    <th className="py-2.5 px-3 text-cyan-800">Giao (+)</th>
-                    <th className="py-2.5 px-3 text-emerald-800">Thu (-)</th>
-                    <th className="py-2.5 px-3">Tồn Sau GD</th>
-                    <th className="py-2.5 px-3">Ký Nhận Điện Tử (e-PoD)</th>
+                  <tr className="bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Mã GD &amp; Giờ</th>
+                    <th className="py-2.5 px-2">Điểm Bán / Garage</th>
+                    <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Giao (+)</th>
+                    <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Thu (-)</th>
+                    <th className="py-2.5 px-1.5 text-center whitespace-nowrap">Tồn Sau</th>
+                    <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Ký Nhận e-PoD</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-slate-400">
-                        Không tìm thấy giao dịch nào.
+                      <td colSpan={6} className="py-8 text-center text-slate-400">
+                        Không tìm thấy giao dịch nào phù hợp với bộ lọc.
                       </td>
                     </tr>
                   ) : (
                     paginatedTransactions.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.id}</td>
-                        <td className="py-3 px-3 font-semibold text-slate-900">{tx.customerName}</td>
-                        <td className="py-3 px-3 font-mono font-bold text-cyan-700">
-                          {tx.delivered > 0 ? `+${tx.delivered}` : '-'}
+                      <tr key={tx.id} className="hover:bg-cyan-50/20 transition-colors">
+                        <td className="py-2 px-2.5 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyCode(tx.id)}
+                            className="group inline-flex items-center gap-1 font-mono font-bold text-[10.5px] text-slate-800 bg-slate-100 hover:bg-cyan-50 hover:text-cyan-900 px-1.5 py-0.5 rounded-md transition cursor-pointer whitespace-nowrap"
+                            title={`Bấm để sao chép: ${tx.id}`}
+                          >
+                            <span>{formatTxCode(tx.id)}</span>
+                            {copiedTxId === tx.id ? (
+                              <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                            ) : (
+                              <Copy className="w-3 h-3 text-slate-400 group-hover:text-cyan-700 shrink-0" />
+                            )}
+                          </button>
+                          <div className="flex items-center gap-1 text-[9.5px] text-slate-400 mt-0.5 font-medium whitespace-nowrap">
+                            <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            <span>{tx.timestamp}</span>
+                          </div>
                         </td>
-                        <td className="py-3 px-3 font-mono font-bold text-emerald-700">
-                          {tx.returned > 0 ? `-${tx.returned}` : '-'}
+                        <td className="py-2 px-2">
+                          <div className="font-bold text-slate-900 text-xs truncate max-w-[120px] lg:max-w-[140px] xl:max-w-[170px]" title={tx.customerName}>
+                            {tx.customerName}
+                          </div>
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                            <Building2 className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                            <span className="truncate max-w-[110px] lg:max-w-[130px]">
+                              {customers.find((c) => c.id === tx.customerId)?.type || 'Điểm bán B2B'}
+                            </span>
+                          </div>
                         </td>
-                        <td className="py-3 px-3 font-mono font-extrabold text-slate-900">
-                          {tx.balanceAfter} vỏ
+                        <td className="py-2 px-1.5 text-center whitespace-nowrap">
+                          {tx.delivered > 0 ? (
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-cyan-50 border border-cyan-200 text-cyan-900 font-bold text-[11px]">
+                              <ArrowUpRight className="w-3 h-3 text-cyan-700 shrink-0" />
+                              +{tx.delivered} phuy
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-bold text-sm">—</span>
+                          )}
                         </td>
-                        <td className="py-3 px-3 text-slate-500">
+                        <td className="py-2 px-1.5 text-center whitespace-nowrap">
+                          {tx.returned > 0 ? (
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-[11px]">
+                              <ArrowDownLeft className="w-3 h-3 text-emerald-700 shrink-0" />
+                              -{tx.returned} vỏ
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-bold text-sm">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-1.5 text-center whitespace-nowrap">
+                          <div className="inline-flex flex-col items-center">
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                                tx.balanceAfter === 0
+                                  ? 'bg-slate-100 text-slate-600'
+                                  : 'bg-amber-100/80 text-amber-950 border border-amber-200/60'
+                              }`}
+                            >
+                              {tx.balanceAfter} vỏ
+                            </span>
+                            <span className="text-[9.5px] text-slate-400 font-medium mt-0.5">
+                              {tx.balanceAfter > 0 ? formatVND(tx.balanceAfter * DEPOSIT_PRICE_PER_DRUM) : '0 đ'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-2 px-2.5 text-right whitespace-nowrap">
                           {tx.signature ? (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                <span className="font-bold text-emerald-900 truncate max-w-[130px]">
-                                  {tx.signedBy || 'Đã ký e-PoD'}
-                                </span>
+                            <div className="flex flex-col items-end gap-0.5">
+                              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-[10px] font-bold">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span className="truncate max-w-[85px]">{tx.signedBy || 'Đã ký'}</span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-400 font-mono">{tx.timestamp}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => setViewingProofTx(tx)}
-                                  className="text-[10px] font-bold text-cyan-700 hover:text-cyan-900 hover:underline cursor-pointer"
-                                >
-                                  Xem e-PoD
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setViewingProofTx(tx)}
+                                className="text-[10px] font-bold text-cyan-700 hover:text-cyan-900 hover:underline cursor-pointer"
+                              >
+                                Xem chứng từ →
+                              </button>
                             </div>
                           ) : (
-                            <div className="space-y-1">
+                            <div className="flex justify-end">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1216,12 +1363,11 @@ export default function DrumsView({
                                   clearCanvas();
                                   setShowSignatureModal(true);
                                 }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-cyan-900 text-[11px] font-bold transition cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white text-[11px] font-bold shadow-xs whitespace-nowrap cursor-pointer transition-colors"
                               >
-                                <PenTool className="w-3 h-3 text-cyan-700" />
+                                <PenTool className="w-3 h-3" />
                                 <span>Ký nhận e-PoD</span>
                               </button>
-                              <div className="text-[10px] text-slate-400 font-mono">{tx.timestamp}</div>
                             </div>
                           )}
                         </td>
