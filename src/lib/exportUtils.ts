@@ -79,7 +79,7 @@ export function exportCustomerDebtReport(customers: Customer[]) {
       c.type,
       c.phone || "",
       c.route || "Tuyến trung tâm",
-      c.visitDay || "",
+      (c.visitDates ?? []).join("; ") || "",
       c.creditLimit,
       c.creditTermDays || 30,
       c.currentDebt,

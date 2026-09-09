@@ -9,6 +9,10 @@ import {
   updateCustomer,
 } from "@/app/(private)/khach-hang/actions";
 import {
+  VisitDatesEditor,
+  type VisitPlanItem,
+} from "@/components/customers/VisitDatesEditor";
+import {
   CUSTOMERS_QUERY_KEY,
   type CustomerDto,
 } from "@/app/(private)/khach-hang/customer-query";
@@ -56,11 +60,9 @@ export function CustomerActionMenu({ customer }: CustomerActionMenuProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [type, setType] = useState<"GARAGE" | "FLEET">(customer.type);
-  const [selectedVisitDays, setSelectedVisitDays] = useState<string[]>(() => {
-    if (customer.visitDays && customer.visitDays.length > 0) return customer.visitDays;
-    if (customer.visitDay) return [customer.visitDay];
-    return [];
-  });
+  const [visitPlans, setVisitPlans] = useState<VisitPlanItem[]>(
+    () => customer.visitPlans ?? [],
+  );
   const [pending, startTransition] = useTransition();
 
   function handleUpdate(formData: FormData) {
@@ -109,6 +111,7 @@ export function CustomerActionMenu({ customer }: CustomerActionMenuProps) {
           <DropdownMenuItem
             onClick={() => {
               setType(customer.type);
+              setVisitPlans(customer.visitPlans ?? []);
               setEditOpen(true);
             }}
           >
@@ -226,40 +229,15 @@ export function CustomerActionMenu({ customer }: CustomerActionMenuProps) {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <Label>Lịch ghé tuyến MCP (chọn nhiều ngày)</Label>
-                <span className="text-xs text-muted-foreground font-mono">
-                  {selectedVisitDays.length > 0 ? selectedVisitDays.join(", ") : "Chưa gán"}
-                </span>
-              </div>
-              <input type="hidden" name="visitDays" value={selectedVisitDays.join(",")} />
-              <input type="hidden" name="visitDay" value={selectedVisitDays[0] || ""} />
-              <div className="grid grid-cols-6 gap-1.5">
-                {(["T2", "T3", "T4", "T5", "T6", "T7"] as const).map((day) => {
-                  const isSelected = selectedVisitDays.includes(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      disabled={pending}
-                      onClick={() => {
-                        setSelectedVisitDays((prev) =>
-                          isSelected ? prev.filter((d) => d !== day) : [...prev, day]
-                        );
-                      }}
-                      className={`py-2 px-1 rounded-lg text-center text-xs font-bold transition-colors cursor-pointer ${
-                        isSelected
-                          ? "bg-amber-500 text-slate-950 shadow-xs ring-1 ring-amber-400 font-black"
-                          : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                      }`}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <VisitDatesEditor
+              customerId={customer.id}
+              plans={visitPlans}
+              onPlansChange={(plans) => {
+                setVisitPlans(plans);
+                void queryClient.invalidateQueries({ queryKey: CUSTOMERS_QUERY_KEY });
+              }}
+              disabled={pending}
+            />
 
             <DialogFooter className="mx-0 mb-0 rounded-none border-0 bg-transparent p-0">
               <Button

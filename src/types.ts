@@ -78,6 +78,12 @@ export interface Customer {
   route: string;
   visitDay?: VisitDayOfWeek;
   visitDays?: VisitDayOfWeek[];
+  visitDates?: string[];
+  visitPlans?: Array<{
+    id: string;
+    visitDate: string;
+    note?: string | null;
+  }>;
   visitFrequency?: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
   creditLimit: number;
   creditTermDays?: number; // default 30 days

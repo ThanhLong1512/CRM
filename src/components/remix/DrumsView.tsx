@@ -1,5 +1,6 @@
 "use client";
-import { useState, useRef, useEffect, FormEvent, MouseEvent, TouchEvent } from 'react';
+
+import { useState, useRef, useEffect, FormEvent, MouseEvent, TouchEvent, useMemo } from 'react';
 import { Customer, DrumTransaction } from '../types';
 import { formatVND } from '../mockData';
 import { soundFX } from '../utils/audio';
@@ -18,10 +19,20 @@ import {
   History,
   ShieldCheck,
   Boxes,
+  Search,
+  AlertTriangle,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Check,
+  Filter,
+  Layers,
+  MapPin,
+  Phone,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { usePagination } from '../../hooks/usePagination';
 import Pagination from '../common/Pagination';
-
 
 interface DrumsViewProps {
   customers: Customer[];
@@ -40,6 +51,11 @@ interface DrumsViewProps {
   ) => void;
 }
 
+const DEPOSIT_PRICE_PER_DRUM = 400000; // 400.000đ per steel drum
+
+type CustomerLedgerFilter = 'ALL' | 'HOLDING' | 'URGENT' | 'CLEARED';
+type TransactionFilter = 'ALL' | 'DELIVERY' | 'RETURN' | 'SIGNED';
+
 export default function DrumsView({
   customers,
   drumTransactions: initialDrumTransactions,
@@ -47,17 +63,120 @@ export default function DrumsView({
   onSignTransaction,
 }: DrumsViewProps) {
   const [localTransactions, setLocalTransactions] = useState<DrumTransaction[]>(initialDrumTransactions);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(
-    customers[0]?.id || ''
-  );
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
   const [deliveredCount, setDeliveredCount] = useState<number | ''>('');
   const [returnedCount, setReturnedCount] = useState<number | ''>('');
   const [message, setMessage] = useState<string>('');
+
+  // Sổ kiểm kê tồn vỏ (Customer Drum Ledger) State
+  const [ledgerSearch, setLedgerSearch] = useState('');
+  const [ledgerFilter, setLedgerFilter] = useState<CustomerLedgerFilter>('ALL');
+
+  // Lịch sử giao dịch (Transaction History) Filter State
+  const [txSearch, setTxSearch] = useState('');
+  const [txFilter, setTxFilter] = useState<TransactionFilter>('ALL');
+
+  // Digital Signature Modal State
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [signedName, setSignedName] = useState('Trần Minh Đức (Chủ Garage)');
+  const [targetTxForSignature, setTargetTxForSignature] = useState<DrumTransaction | null>(null);
+  const [viewingProofTx, setViewingProofTx] = useState<DrumTransaction | null>(null);
+  const [formSignature, setFormSignature] = useState<{ signature: string; signedBy: string } | null>(null);
+
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const formRef = useRef<HTMLDivElement | null>(null);
+  const [hasSignature, setHasSignature] = useState(false);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   // Keep local transactions in sync with prop updates
   useEffect(() => {
     setLocalTransactions(initialDrumTransactions);
   }, [initialDrumTransactions]);
+
+  const activeCustomer = customers.find((c) => c.id === selectedCustomerId);
+
+  // Drums KPI Metrics
+  const totalDrumsInMarket = useMemo(
+    () => customers.reduce((sum, c) => sum + (c.emptyDrums || 0), 0),
+    [customers]
+  );
+  const customersHoldingDrums = useMemo(
+    () => customers.filter((c) => (c.emptyDrums || 0) > 0),
+    [customers]
+  );
+  const urgentCustomers = useMemo(
+    () => customers.filter((c) => (c.emptyDrums || 0) >= 10),
+    [customers]
+  );
+  const drumsInTransit = 8; // On return truck
+  const totalDepositTiedUp = totalDrumsInMarket * DEPOSIT_PRICE_PER_DRUM;
+
+  // Calculate return efficiency %
+  const totalDeliveredEver = useMemo(
+    () => localTransactions.reduce((acc, t) => acc + (t.delivered || 0), 0),
+    [localTransactions]
+  );
+  const totalReturnedEver = useMemo(
+    () => localTransactions.reduce((acc, t) => acc + (t.returned || 0), 0),
+    [localTransactions]
+  );
+  const returnRatePercent = totalDeliveredEver + totalReturnedEver > 0
+    ? Math.min(100, Math.round((totalReturnedEver / Math.max(1, totalDeliveredEver)) * 100))
+    : 85;
+
+  // Filtered Customer Ledger
+  const filteredCustomers = useMemo(() => {
+    return customers.filter((c) => {
+      // Filter by tab
+      const drums = c.emptyDrums || 0;
+      if (ledgerFilter === 'HOLDING' && drums === 0) return false;
+      if (ledgerFilter === 'URGENT' && drums < 10) return false;
+      if (ledgerFilter === 'CLEARED' && drums > 0) return false;
+
+      // Filter by search
+      if (!ledgerSearch.trim()) return true;
+      const q = ledgerSearch.toLowerCase().trim();
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.code && c.code.toLowerCase().includes(q)) ||
+        (c.phone && c.phone.includes(q)) ||
+        (c.route && c.route.toLowerCase().includes(q))
+      );
+    });
+  }, [customers, ledgerFilter, ledgerSearch]);
+
+  const {
+    currentPage: ledgerPage,
+    pageSize: ledgerPageSize,
+    totalPages: ledgerTotalPages,
+    paginatedItems: paginatedLedgerCustomers,
+    startIndex: ledgerStartIndex,
+    endIndex: ledgerEndIndex,
+    totalItems: ledgerTotalItems,
+    goToPage: goToLedgerPage,
+    setPageSize: setLedgerPageSize,
+  } = usePagination({
+    items: filteredCustomers,
+    initialPageSize: 6,
+    pageSizeOptions: [6, 12, 24],
+  });
+
+  // Filtered Transactions
+  const filteredTransactions = useMemo(() => {
+    return localTransactions.filter((tx) => {
+      if (txFilter === 'DELIVERY' && (!tx.delivered || tx.delivered <= 0)) return false;
+      if (txFilter === 'RETURN' && (!tx.returned || tx.returned <= 0)) return false;
+      if (txFilter === 'SIGNED' && !tx.signature) return false;
+
+      if (!txSearch.trim()) return true;
+      const q = txSearch.toLowerCase().trim();
+      return (
+        tx.id.toLowerCase().includes(q) ||
+        tx.customerName.toLowerCase().includes(q) ||
+        (tx.signedBy && tx.signedBy.toLowerCase().includes(q))
+      );
+    });
+  }, [localTransactions, txFilter, txSearch]);
 
   const {
     currentPage: txCurrentPage,
@@ -70,33 +189,34 @@ export default function DrumsView({
     goToPage: goToTxPage,
     setPageSize: setTxPageSize,
   } = usePagination({
-    items: localTransactions,
+    items: filteredTransactions,
     initialPageSize: 6,
     pageSizeOptions: [6, 12, 24],
   });
 
-  // Digital Signature Modal State
-  const [showSignatureModal, setShowSignatureModal] = useState(false);
-  const [signedName, setSignedName] = useState('Trần Minh Đức (Chủ Garage)');
-  const [targetTxForSignature, setTargetTxForSignature] = useState<DrumTransaction | null>(null);
-  const [viewingProofTx, setViewingProofTx] = useState<DrumTransaction | null>(null);
-  const [formSignature, setFormSignature] = useState<{ signature: string; signedBy: string } | null>(null);
+  // Quick Action handlers from ledger row
+  const handleQuickRecall = (customer: Customer) => {
+    setSelectedCustomerId(customer.id);
+    const holding = customer.emptyDrums || 0;
+    setDeliveredCount(0);
+    setReturnedCount(holding > 0 ? holding : 1);
+    setMessage('');
+    if (formRef.current) {
+      formRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [hasSignature, setHasSignature] = useState(false);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const handleQuickDeliver = (customer: Customer) => {
+    setSelectedCustomerId(customer.id);
+    setDeliveredCount(1);
+    setReturnedCount(0);
+    setMessage('');
+    if (formRef.current) {
+      formRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
 
-  const activeCustomer = customers.find((c) => c.id === selectedCustomerId);
-
-  // Drum Metrics
-  const DEPOSIT_PRICE_PER_DRUM = 400000; // 400.000đ per steel drum
-  const totalDrumsInMarket = customers.reduce(
-    (sum, c) => sum + (c.emptyDrums || 0),
-    0
-  );
-  const drumsInTransit = 8; // On return truck
-  const totalDepositTiedUp = totalDrumsInMarket * DEPOSIT_PRICE_PER_DRUM;
-
+  // Form Submission
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!activeCustomer) return;
@@ -122,10 +242,20 @@ export default function DrumsView({
       formSignature?.signedBy
     );
     soundFX.playSuccess();
+
+    const netChange = delivered - returned;
+    const depositDiff = netChange * DEPOSIT_PRICE_PER_DRUM;
+    const diffNote =
+      depositDiff > 0
+        ? ` (Khách cọc thêm: +${formatVND(depositDiff)})`
+        : depositDiff < 0
+        ? ` (Hoàn cọc cho khách: ${formatVND(depositDiff)})`
+        : ' (Cân bằng cọc: 0 đ)';
+
     setMessage(
-      `Đã cập nhật vỏ phuy 200L cho ${activeCustomer.name}: Giao +${delivered}, Thu -${returned}${
-        formSignature ? ' (Kèm chữ ký e-PoD thực địa)' : ''
-      }.`
+      `Đã cập nhật đối soát vỏ phuy cho ${activeCustomer.name}: Giao +${delivered}, Thu -${returned}${diffNote}${
+        formSignature ? ' — Đã đính kèm chữ ký e-PoD.' : '.'
+      }`
     );
 
     setDeliveredCount('');
@@ -181,108 +311,469 @@ export default function DrumsView({
     setHasSignature(false);
   };
 
+  // Real-time calculation helpers for form
+  const numDelivered = Number(deliveredCount) || 0;
+  const numReturned = Number(returnedCount) || 0;
+  const currentCustomerBalance = activeCustomer?.emptyDrums || 0;
+  const balanceAfterSimulated = Math.max(0, currentCustomerBalance + numDelivered - numReturned);
+  const netDrumChange = numDelivered - numReturned;
+  const depositDifferential = netDrumChange * DEPOSIT_PRICE_PER_DRUM;
+
   return (
-    <div id="drums-view" className="w-full space-y-6">
-      {/* 1. Header */}
-      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs sm:flex-row sm:items-center">
+    <div id="drums-view" className="w-full space-y-6 pb-12">
+      {/* 1. Header Banner */}
+      <div className="flex flex-col justify-between gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center">
         <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">
-              Quản Lý &amp; Cấn Trừ Vòng Đời Vỏ Phuy Sắt 200L
-            </h2>
-            <span className="rounded-full border border-cyan-300 bg-cyan-100 px-2.5 py-0.5 text-xs font-bold text-cyan-900">
-              200L Drum Asset Tracking
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+              Quản Lý Vòng Đời &amp; Cấn Trừ Vỏ Phuy Sắt 200L
+            </h1>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-300 bg-cyan-100 px-3 py-1 text-xs font-black text-cyan-900 shadow-xs">
+              <Boxes className="w-3.5 h-3.5 text-cyan-700" />
+              <span>200L Drum Life-Cycle &amp; e-PoD</span>
             </span>
           </div>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Kiểm soát tài sản thế chân 400.000đ/vỏ, đối soát 2 chiều Giao mới - Thu hồi và ký biên bản điện tử
+          <p className="mt-1 text-xs sm:text-sm text-slate-500 font-medium">
+            Kiểm soát tài sản thế chân <strong>400.000 đ / vỏ</strong>, theo dõi chi tiết tồn vỏ tại từng điểm bán, đối soát 2 chiều Giao - Thu và ký biên bản điện tử e-PoD
           </p>
         </div>
 
-        <button
-          onClick={() => setShowSignatureModal(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-xs cursor-pointer hover:bg-cyan-700"
-        >
-          <PenTool className="w-4 h-4" />
-          <span>Biên Bản Ký Nhận Vỏ</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            onClick={() => {
+              setTargetTxForSignature(null);
+              setSignedName(activeCustomer ? `${activeCustomer.name} (Chủ Garage)` : 'Trần Minh Đức (Chủ Garage)');
+              clearCanvas();
+              setShowSignatureModal(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-cyan-700 hover:bg-cyan-800 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer"
+          >
+            <PenTool className="w-4 h-4" />
+            <span>Biên Bản Ký e-PoD</span>
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-3.5 py-2.5 text-xs font-bold text-slate-700 shadow-xs transition-colors cursor-pointer"
+          >
+            <Printer className="w-4 h-4 text-slate-500" />
+            <span className="hidden sm:inline">In Sổ Kiểm Kê</span>
+          </button>
+        </div>
       </div>
 
-      {/* 2. Top Drum Ledger Balance Cards (Bảng Cân Bằng Vỏ Phuy) */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+      {/* 2. Executive 4 KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Card 1: Drums at customer garages */}
-        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="min-w-0">
-            <div className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
+        <div className="rounded-2xl border border-amber-200/80 bg-linear-to-br from-white to-amber-50/40 p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-amber-900">
               Vỏ Tại Khách Hàng
-            </div>
-            <div className="mt-1 sm:mt-2 text-xl sm:text-3xl font-black font-mono text-amber-700">
-              {totalDrumsInMarket} <span className="text-xs sm:text-sm font-semibold text-slate-500">vỏ</span>
-            </div>
-            <div className="hidden sm:block text-[11px] text-amber-700 font-medium mt-1">
-              Phân bổ trên {customers.filter((c) => (c.emptyDrums || 0) > 0).length} điểm bán &amp; đội xe
+            </span>
+            <div className="size-9 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-base shrink-0 shadow-2xs">
+              🛢️
             </div>
           </div>
-          <div className="size-10 sm:size-12 shrink-0 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-lg sm:text-xl">
-            🛢️
+          <div className="mt-3">
+            <div className="text-2xl sm:text-3xl font-black font-mono text-amber-950">
+              {totalDrumsInMarket} <span className="text-xs sm:text-sm font-bold text-amber-700">vỏ</span>
+            </div>
+            <p className="mt-1 text-[11px] font-medium text-amber-800 truncate">
+              Phân bổ trên {customersHoldingDrums.length} điểm bán &amp; đội xe
+            </p>
           </div>
         </div>
 
         {/* Card 2: Drums in transit */}
-        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="min-w-0">
-            <div className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
-              Vỏ Trên Xe Về Kho
-            </div>
-            <div className="mt-1 sm:mt-2 text-xl sm:text-3xl font-black font-mono text-cyan-800">
-              {drumsInTransit} <span className="text-xs sm:text-sm font-semibold text-slate-500">vỏ</span>
-            </div>
-            <div className="hidden sm:block text-[11px] text-cyan-700 font-medium mt-1">
-              Đang trên 2 xe tải giao vận của công ty
+        <div className="rounded-2xl border border-cyan-200/80 bg-linear-to-br from-white to-cyan-50/40 p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-cyan-900">
+              Vỏ Đang Trên Xe Về Kho
+            </span>
+            <div className="size-9 rounded-xl bg-cyan-100 border border-cyan-300 flex items-center justify-center text-base shrink-0 shadow-2xs">
+              🚚
             </div>
           </div>
-          <div className="size-10 sm:size-12 shrink-0 rounded-2xl bg-cyan-100 text-cyan-800 flex items-center justify-center text-lg sm:text-xl">
-            🚚
+          <div className="mt-3">
+            <div className="text-2xl sm:text-3xl font-black font-mono text-cyan-950">
+              {drumsInTransit} <span className="text-xs sm:text-sm font-bold text-cyan-700">vỏ</span>
+            </div>
+            <p className="mt-1 text-[11px] font-medium text-cyan-800 truncate">
+              Đang trên 2 xe vận tải thu hồi
+            </p>
           </div>
         </div>
 
-        {/* Card 3: Total Deposit Money tied up */}
-        <div className="col-span-2 lg:col-span-1 bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="min-w-0">
-            <div className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
-              Tiền Cọc Đang Treo
-            </div>
-            <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-black font-mono text-emerald-800">
-              {formatVND(totalDepositTiedUp)}
-            </div>
-            <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 sm:mt-1">
-              Định mức: <strong>400.000 đ / vỏ</strong>
+        {/* Card 3: Deposit Tied Up */}
+        <div className="rounded-2xl border border-emerald-200/80 bg-linear-to-br from-white to-emerald-50/40 p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-emerald-900">
+              Tiền Cọc Bảo Lưu
+            </span>
+            <div className="size-9 rounded-xl bg-emerald-100 border border-emerald-300 flex items-center justify-center text-base shrink-0 shadow-2xs">
+              💰
             </div>
           </div>
-          <div className="size-10 sm:size-12 shrink-0 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-lg sm:text-xl">
-            💵
+          <div className="mt-3">
+            <div className="text-xl sm:text-2xl font-black font-mono text-emerald-950 truncate">
+              {formatVND(totalDepositTiedUp)}
+            </div>
+            <p className="mt-1 text-[11px] font-medium text-emerald-800 truncate">
+              Định mức: 400.000 đ / vỏ sắt
+            </p>
+          </div>
+        </div>
+
+        {/* Card 4: Return Rate */}
+        <div className="rounded-2xl border border-indigo-200/80 bg-linear-to-br from-white to-indigo-50/40 p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-indigo-900">
+              Tỷ Lệ Thu Hồi Vỏ
+            </span>
+            <div className="size-9 rounded-xl bg-indigo-100 border border-indigo-300 flex items-center justify-center text-base shrink-0 shadow-2xs">
+              🔄
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl sm:text-3xl font-black font-mono text-indigo-950 flex items-baseline gap-1">
+              {returnRatePercent}%
+              <span className="text-[10px] font-bold text-indigo-700 uppercase">Hiệu suất cao</span>
+            </div>
+            <div className="mt-1.5 w-full bg-indigo-100 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-indigo-600 h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${returnRatePercent}%` }}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 3. Main Row: 2-Way Reconciliation Form & Realtime Customer Ledger */}
+      {/* 3. Customer Drum Ledger (Sổ Kiểm Kê Tồn Vỏ Phuy Theo Điểm Bán) */}
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-cyan-700" />
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                Sổ Kiểm Kê Tồn Vỏ Phuy Theo Điểm Bán / Garage
+              </h2>
+            </div>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Tra cứu nhanh khách hàng đang giữ vỏ phuy, tiền cọc bảo lưu và thực hiện thu hồi vỏ chỉ với 1 click
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Tìm tên, mã, SĐT, tuyến..."
+                value={ledgerSearch}
+                onChange={(e) => setLedgerSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-300 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setLedgerFilter('ALL')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              ledgerFilter === 'ALL'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Tất cả ({customers.length})
+          </button>
+          <button
+            onClick={() => setLedgerFilter('HOLDING')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              ledgerFilter === 'HOLDING'
+                ? 'bg-amber-700 text-white shadow-2xs'
+                : 'bg-amber-50 text-amber-900 hover:bg-amber-100'
+            }`}
+          >
+            Đang giữ vỏ ({customersHoldingDrums.length})
+          </button>
+          <button
+            onClick={() => setLedgerFilter('URGENT')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              ledgerFilter === 'URGENT'
+                ? 'bg-rose-700 text-white shadow-2xs'
+                : 'bg-rose-50 text-rose-900 hover:bg-rose-100'
+            }`}
+          >
+            Cần thu hồi gấp ≥ 10 vỏ ({urgentCustomers.length})
+          </button>
+          <button
+            onClick={() => setLedgerFilter('CLEARED')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              ledgerFilter === 'CLEARED'
+                ? 'bg-emerald-700 text-white shadow-2xs'
+                : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+            }`}
+          >
+            Đã thanh toán hết (= 0 vỏ)
+          </button>
+        </div>
+
+        {/* Desktop Ledger Table */}
+        <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="bg-slate-50/80 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
+                <th className="py-3 px-4">Điểm Bán / Garage</th>
+                <th className="py-3 px-4">Phân Loại &amp; Tuyến</th>
+                <th className="py-3 px-4 text-center">Số Vỏ Đang Giữ</th>
+                <th className="py-3 px-4 text-right">Tiền Cọc Bảo Lưu</th>
+                <th className="py-3 px-4">Trạng Thái Luân Chuyển</th>
+                <th className="py-3 px-4 text-right">Thao Tác Nhanh</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginatedLedgerCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                    Không tìm thấy điểm bán nào phù hợp với bộ lọc.
+                  </td>
+                </tr>
+              ) : (
+                paginatedLedgerCustomers.map((c) => {
+                  const drums = c.emptyDrums || 0;
+                  const deposit = drums * DEPOSIT_PRICE_PER_DRUM;
+                  const isSelected = c.id === selectedCustomerId;
+
+                  return (
+                    <tr
+                      key={c.id}
+                      className={`hover:bg-slate-50/90 transition-colors ${
+                        isSelected ? 'bg-cyan-50/60 font-semibold' : ''
+                      }`}
+                    >
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                          <span>{c.name}</span>
+                          {c.code && (
+                            <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                              {c.code}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                          {c.phone && (
+                            <span className="flex items-center gap-1">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              {c.phone}
+                            </span>
+                          )}
+                          <span className="truncate max-w-[200px] text-slate-400">{c.address}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex flex-col gap-1">
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold w-fit">
+                            {c.type}
+                          </span>
+                          <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-slate-400" />
+                            {c.route || 'Tuyến mặc định'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-mono font-black text-xs ${
+                            drums === 0
+                              ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                              : drums <= 5
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              : drums < 10
+                              ? 'bg-amber-100 text-amber-950 border border-amber-300'
+                              : 'bg-rose-100 text-rose-950 border border-rose-300 animate-pulse'
+                          }`}
+                        >
+                          🛢️ {drums} vỏ
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-xs text-slate-900">
+                        {drums > 0 ? (
+                          <span className="text-emerald-800 font-extrabold">{formatVND(deposit)}</span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">0 đ</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {drums === 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                            <Check className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Đã thu hồi hết</span>
+                          </span>
+                        ) : drums <= 5 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Định mức an toàn</span>
+                          </span>
+                        ) : drums < 10 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Đến kỳ thu hồi</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-black text-rose-800">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Quá hạn đối soát</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleQuickRecall(c)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 text-[11px] font-bold transition-colors cursor-pointer shadow-2xs"
+                            title="Nạp khách vào bộ đối soát và điền sẵn số vỏ thu hồi"
+                          >
+                            <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>Thu vỏ</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickDeliver(c)}
+                            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-cyan-900 text-[11px] font-bold transition-colors cursor-pointer shadow-2xs"
+                            title="Giao thêm phuy mới"
+                          >
+                            <ArrowUpRight className="w-3.5 h-3.5 text-cyan-700" />
+                            <span>Giao mới</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Ledger Cards */}
+        <div className="md:hidden space-y-3">
+          {paginatedLedgerCustomers.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-xs">
+              Không tìm thấy điểm bán nào phù hợp.
+            </div>
+          ) : (
+            paginatedLedgerCustomers.map((c) => {
+              const drums = c.emptyDrums || 0;
+              const deposit = drums * DEPOSIT_PRICE_PER_DRUM;
+              const isSelected = c.id === selectedCustomerId;
+
+              return (
+                <div
+                  key={c.id}
+                  className={`rounded-2xl border p-3.5 space-y-2.5 transition-colors ${
+                    isSelected
+                      ? 'border-cyan-400 bg-cyan-50/40 shadow-xs'
+                      : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <span>{c.name}</span>
+                        {c.code && (
+                          <span className="font-mono text-[9px] text-slate-500 bg-slate-100 px-1 py-0.5 rounded">
+                            {c.code}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{c.address}</div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono font-black text-xs shrink-0 ${
+                        drums === 0
+                          ? 'bg-slate-100 text-slate-600'
+                          : drums <= 5
+                          ? 'bg-emerald-100 text-emerald-900'
+                          : drums < 10
+                          ? 'bg-amber-100 text-amber-950'
+                          : 'bg-rose-100 text-rose-950'
+                      }`}
+                    >
+                      🛢️ {drums} vỏ
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 p-2 text-xs border border-slate-100">
+                    <span className="text-[11px] text-slate-500">Tiền cọc thế chân:</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      {drums > 0 ? formatVND(deposit) : '0 đ'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDeliver(c)}
+                      className="px-2.5 py-1.5 rounded-lg border border-cyan-300 bg-cyan-50 text-cyan-800 text-xs font-bold"
+                    >
+                      + Giao phuy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickRecall(c)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-2xs"
+                    >
+                      ⚡ Thu hồi vỏ
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Ledger Pagination */}
+        <div className="pt-2">
+          <Pagination
+            currentPage={ledgerPage}
+            totalPages={ledgerTotalPages}
+            pageSize={ledgerPageSize}
+            totalItems={ledgerTotalItems}
+            startIndex={ledgerStartIndex}
+            endIndex={ledgerEndIndex}
+            onPageChange={goToLedgerPage}
+            onPageSizeChange={setLedgerPageSize}
+            pageSizeOptions={[6, 12, 24]}
+            compact
+          />
+        </div>
+      </div>
+
+      {/* 4. Main Row: 2-Way Reconciliation Terminal & Live Transaction History */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left 5 Cols: 2-Way Drum Transaction Form */}
-        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-4">
+        <div ref={formRef} className="lg:col-span-5 rounded-3xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
           <div className="border-b border-slate-100 pb-3">
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <ArrowRightLeft className="w-5 h-5 text-cyan-600" />
-              <span>Đối Soát 2 Chiều Giao Nhận Vỏ</span>
-            </h3>
+              <h3 className="text-base font-bold text-slate-900">
+                Đối Soát 2 Chiều Giao Nhận &amp; Cấn Trừ Tiền Cọc
+              </h3>
+            </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Nhập số lượng phuy mới giao đi và vỏ rỗng thu hồi về từ điểm bán
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Customer Picker */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Chọn Điểm Bán / Gara Đối Tác:
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Điểm Bán / Garage Đối Tác:
               </label>
               <select
                 value={selectedCustomerId}
@@ -290,21 +781,58 @@ export default function DrumsView({
                   setSelectedCustomerId(e.target.value);
                   setMessage('');
                 }}
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-cyan-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600 bg-slate-50/50"
               >
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} (Đang giữ: {c.emptyDrums || 0} vỏ phuy)
+                    {c.name} — (Đang giữ: {c.emptyDrums || 0} vỏ phuy)
                   </option>
                 ))}
               </select>
             </div>
 
+            {/* Quick exchange actions */}
+            {activeCustomer && (
+              <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <span className="text-[11px] font-semibold text-slate-500 mr-1">Lối tắt:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeliveredCount(1);
+                    setReturnedCount(1);
+                  }}
+                  className="px-2 py-1 rounded-lg bg-white border border-slate-200 hover:border-cyan-400 font-bold text-slate-700 text-[11px] cursor-pointer"
+                >
+                  🔄 Đổi 1 - 1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeliveredCount(0);
+                    setReturnedCount(activeCustomer.emptyDrums || 1);
+                  }}
+                  className="px-2 py-1 rounded-lg bg-white border border-slate-200 hover:border-emerald-400 font-bold text-emerald-800 text-[11px] cursor-pointer"
+                >
+                  ⚡ Thu hết ({activeCustomer.emptyDrums || 0} vỏ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeliveredCount(2);
+                    setReturnedCount(0);
+                  }}
+                  className="px-2 py-1 rounded-lg bg-white border border-slate-200 hover:border-cyan-400 font-bold text-cyan-800 text-[11px] cursor-pointer"
+                >
+                  + Giao 2 phuy
+                </button>
+              </div>
+            )}
+
             {/* 2-Way Inputs: Delivered vs Returned */}
-            <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+            <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200">
               {/* Deliver column */}
               <div>
-                <label className="block text-xs font-bold text-cyan-900 mb-1">
+                <label className="block text-xs font-black text-cyan-950 mb-1">
                   1. Giao Mới (+Phuy)
                 </label>
                 <input
@@ -315,14 +843,25 @@ export default function DrumsView({
                   onChange={(e) =>
                     setDeliveredCount(e.target.value === '' ? '' : Number(e.target.value))
                   }
-                  className="w-full px-3 py-2 rounded-lg border border-cyan-300 bg-white text-base font-mono font-black text-cyan-900 focus:border-cyan-500"
+                  className="w-full px-3 py-2 rounded-xl border border-cyan-300 bg-white text-base font-mono font-black text-cyan-900 focus:border-cyan-600 focus:outline-none"
                 />
-                <div className="text-[10px] text-cyan-700 mt-1 font-semibold">Tăng nợ vỏ (+X)</div>
+                <div className="flex gap-1 mt-1.5">
+                  {[1, 2, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setDeliveredCount((prev) => (Number(prev) || 0) + n)}
+                      className="flex-1 py-0.5 rounded bg-cyan-100 hover:bg-cyan-200 text-cyan-900 text-[10px] font-bold"
+                    >
+                      +{n}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Return column */}
               <div>
-                <label className="block text-xs font-bold text-emerald-900 mb-1">
+                <label className="block text-xs font-black text-emerald-950 mb-1">
                   2. Thu Hồi (-Vỏ Rỗng)
                 </label>
                 <input
@@ -333,36 +872,78 @@ export default function DrumsView({
                   onChange={(e) =>
                     setReturnedCount(e.target.value === '' ? '' : Number(e.target.value))
                   }
-                  className="w-full px-3 py-2 rounded-lg border border-emerald-300 bg-white text-base font-mono font-black text-emerald-900 focus:border-emerald-500"
+                  className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-white text-base font-mono font-black text-emerald-900 focus:border-emerald-600 focus:outline-none"
                 />
-                <div className="text-[10px] text-emerald-700 mt-1 font-semibold">Cấn trừ trả vỏ (-Y)</div>
+                <div className="flex gap-1 mt-1.5">
+                  {[1, 2, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setReturnedCount((prev) => (Number(prev) || 0) + n)}
+                      className="flex-1 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-[10px] font-bold"
+                    >
+                      +{n}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Net Effect Simulation */}
+            {/* Real-time Deposit Differential Calculator (Cấn Trừ Tiền Cọc Trực Tiếp) */}
             {activeCustomer && (
-              <div className="p-3 bg-cyan-50/70 border border-cyan-200 rounded-xl text-xs space-y-1">
-                <div className="flex justify-between text-cyan-900">
-                  <span>Số vỏ khách đang nợ trước giao dịch:</span>
-                  <strong className="font-mono">{activeCustomer.emptyDrums || 0} vỏ</strong>
+              <div className="p-3.5 bg-linear-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-2xl text-xs space-y-2">
+                <div className="flex justify-between items-center text-slate-700">
+                  <span className="font-medium">Số vỏ nợ trước giao dịch:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {currentCustomerBalance} vỏ ({formatVND(currentCustomerBalance * DEPOSIT_PRICE_PER_DRUM)})
+                  </span>
                 </div>
-                <div className="flex justify-between text-cyan-950 font-bold pt-1 border-t border-cyan-200/60">
-                  <span>Số vỏ khách giữ sau giao dịch:</span>
-                  <span className="font-mono text-base">
-                    {Math.max(
-                      0,
-                      (activeCustomer.emptyDrums || 0) +
-                        (Number(deliveredCount) || 0) -
-                        (Number(returnedCount) || 0)
-                    )}{' '}
-                    vỏ
+                <div className="flex justify-between items-center text-slate-700">
+                  <span className="font-medium">Số vỏ sau khi đối soát:</span>
+                  <span className="font-mono font-black text-sm text-slate-900">
+                    {balanceAfterSimulated} vỏ ({formatVND(balanceAfterSimulated * DEPOSIT_PRICE_PER_DRUM)})
+                  </span>
+                </div>
+
+                {/* Net Deposit Impact Banner */}
+                <div
+                  className={`p-2.5 rounded-xl border flex items-center justify-between font-bold ${
+                    depositDifferential > 0
+                      ? 'bg-amber-100 border-amber-300 text-amber-950'
+                      : depositDifferential < 0
+                      ? 'bg-emerald-100 border-emerald-300 text-emerald-950'
+                      : 'bg-slate-200/70 border-slate-300 text-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    {depositDifferential > 0 ? (
+                      <ArrowUpRight className="w-4 h-4 text-amber-800" />
+                    ) : depositDifferential < 0 ? (
+                      <ArrowDownLeft className="w-4 h-4 text-emerald-800" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4 text-slate-600" />
+                    )}
+                    <span>
+                      {depositDifferential > 0
+                        ? 'Khách nộp thêm tiền cọc:'
+                        : depositDifferential < 0
+                        ? 'Đại lý hoàn trả cọc:'
+                        : 'Đổi ngang (Cân bằng cọc):'}
+                    </span>
+                  </div>
+                  <span className="font-mono text-sm">
+                    {depositDifferential > 0
+                      ? `+${formatVND(depositDifferential)}`
+                      : depositDifferential < 0
+                      ? `-${formatVND(Math.abs(depositDifferential))}`
+                      : '0 đ'}
                   </span>
                 </div>
               </div>
             )}
 
             {/* e-PoD Digital Signature trigger on form */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                   <PenTool className="w-3.5 h-3.5 text-cyan-700" />
@@ -384,13 +965,13 @@ export default function DrumsView({
               </div>
 
               {formSignature ? (
-                <div className="flex items-center gap-2.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <div className="flex items-center gap-2.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
                   <div className="h-10 w-28 bg-white border border-emerald-300 rounded overflow-hidden flex items-center justify-center p-0.5 shrink-0 shadow-2xs">
                     <img src={formSignature.signature} alt="Chữ ký" className="max-h-full max-w-full object-contain" />
                   </div>
                   <div className="text-[11px] min-w-0 flex-1">
                     <p className="font-bold text-emerald-900 truncate">✓ Đã ký: {formSignature.signedBy}</p>
-                    <p className="text-[10px] text-emerald-700 font-medium">Bằng chứng pháp lý e-PoD hợp lệ</p>
+                    <p className="text-[10px] text-emerald-700 font-medium">Bằng chứng e-PoD hợp pháp</p>
                   </div>
                 </div>
               ) : (
@@ -402,7 +983,7 @@ export default function DrumsView({
                     clearCanvas();
                     setShowSignatureModal(true);
                   }}
-                  className="w-full py-2 px-3 border border-dashed border-cyan-400 bg-cyan-50/50 hover:bg-cyan-50 rounded-lg text-xs font-bold text-cyan-800 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="w-full py-2.5 px-3 border border-dashed border-cyan-400 bg-cyan-50/50 hover:bg-cyan-50 rounded-xl text-xs font-bold text-cyan-800 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <PenTool className="w-3.5 h-3.5 text-cyan-700" />
                   <span>Ký nhận bàn giao vỏ tại chỗ (Touch Pad)</span>
@@ -411,7 +992,7 @@ export default function DrumsView({
             </div>
 
             {message && (
-              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>{message}</span>
               </div>
@@ -419,170 +1000,240 @@ export default function DrumsView({
 
             <button
               type="submit"
-              className="w-full py-2.5 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+              className="w-full py-3 rounded-2xl bg-cyan-700 hover:bg-cyan-800 text-white font-black text-xs shadow-md transition-colors cursor-pointer"
             >
-              Cập Nhật Biên Bản Đối Soát Vỏ
+              Cập Nhật Biên Bản Đối Soát Vỏ &amp; Lưu e-PoD
             </button>
           </form>
         </div>
 
         {/* Right 7 Cols: Realtime Drum Transactions Log */}
-        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-xs p-6 flex flex-col justify-between">
+        <div className="lg:col-span-7 rounded-3xl border border-slate-200 bg-white shadow-sm p-6 flex flex-col justify-between space-y-4">
           <div>
-            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <History className="w-5 h-5 text-slate-600" />
-                  <span>Lịch Sử Luân Chuyển Vỏ Phuy Sắt 200L</span>
+                  <span>Nhật Ký Luân Chuyển Vỏ Phuy Sắt 200L</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Nhật ký chi tiết các lượt giao nhận và chữ ký xác thực e-PoD
+                  Lịch sử các lượt giao nhận, thu hồi và chữ ký số xác thực e-PoD
                 </p>
+              </div>
+
+              {/* Transaction Search */}
+              <div className="relative w-full sm:w-52">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Mã GD, tên khách..."
+                  value={txSearch}
+                  onChange={(e) => setTxSearch(e.target.value)}
+                  className="w-full pl-8 pr-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-cyan-600"
+                />
               </div>
             </div>
 
-            {/* Mobile Transactions Cards (For small screens: compact, actionable, no horizontal table scroll) */}
+            {/* Filter Tabs for Transactions */}
+            <div className="flex flex-wrap items-center gap-1.5 my-3">
+              <button
+                onClick={() => setTxFilter('ALL')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                  txFilter === 'ALL'
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Tất cả ({localTransactions.length})
+              </button>
+              <button
+                onClick={() => setTxFilter('DELIVERY')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                  txFilter === 'DELIVERY'
+                    ? 'bg-cyan-700 text-white'
+                    : 'bg-cyan-50 text-cyan-900 hover:bg-cyan-100'
+                }`}
+              >
+                Giao mới (+)
+              </button>
+              <button
+                onClick={() => setTxFilter('RETURN')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                  txFilter === 'RETURN'
+                    ? 'bg-emerald-700 text-white'
+                    : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+                }`}
+              >
+                Thu hồi (-)
+              </button>
+              <button
+                onClick={() => setTxFilter('SIGNED')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${
+                  txFilter === 'SIGNED'
+                    ? 'bg-purple-700 text-white'
+                    : 'bg-purple-50 text-purple-900 hover:bg-purple-100'
+                }`}
+              >
+                Đã ký e-PoD
+              </button>
+            </div>
+
+            {/* Mobile Transactions Cards */}
             <div className="md:hidden space-y-2.5">
-              {paginatedTransactions.map((tx) => (
-                <div
-                  key={tx.id}
-                  className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <span className="font-mono text-xs font-bold text-slate-500">#{tx.id}</span>
-                      <h4 className="font-bold text-slate-900 text-xs truncate mt-0.5">{tx.customerName}</h4>
+              {paginatedTransactions.length === 0 ? (
+                <div className="py-6 text-center text-slate-400 text-xs">
+                  Không có giao dịch nào phù hợp.
+                </div>
+              ) : (
+                paginatedTransactions.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <span className="font-mono text-xs font-bold text-slate-500">#{tx.id}</span>
+                        <h4 className="font-bold text-slate-900 text-xs truncate mt-0.5">{tx.customerName}</h4>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400 shrink-0">{tx.timestamp}</span>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-400 shrink-0">{tx.timestamp}</span>
-                  </div>
 
-                  <div className="flex items-center justify-between rounded-lg bg-white p-2 border border-slate-100 text-xs">
-                    <div className="flex items-center gap-3 font-mono">
-                      <span className="text-cyan-700 font-bold">Giao: {tx.delivered > 0 ? `+${tx.delivered}` : '-'}</span>
-                      <span className="text-emerald-700 font-bold">Thu: {tx.returned > 0 ? `-${tx.returned}` : '-'}</span>
+                    <div className="flex items-center justify-between rounded-xl bg-white p-2.5 border border-slate-100 text-xs">
+                      <div className="flex items-center gap-3 font-mono">
+                        <span className="text-cyan-800 font-bold">Giao: {tx.delivered > 0 ? `+${tx.delivered}` : '-'}</span>
+                        <span className="text-emerald-800 font-bold">Thu: {tx.returned > 0 ? `-${tx.returned}` : '-'}</span>
+                      </div>
+                      <div className="font-extrabold text-slate-900 font-mono">
+                        Tồn: {tx.balanceAfter} vỏ
+                      </div>
                     </div>
-                    <div className="font-bold text-slate-900 font-mono">
-                      Tồn: {tx.balanceAfter} vỏ
-                    </div>
-                  </div>
 
-                  <div className="pt-0.5">
-                    {tx.signature ? (
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-1.5 text-emerald-800 min-w-0">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span className="font-semibold truncate text-[11px]">{tx.signedBy || 'Đã ký e-PoD'}</span>
+                    <div className="pt-0.5">
+                      {tx.signature ? (
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5 text-emerald-800 min-w-0">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="font-semibold truncate text-[11px]">{tx.signedBy || 'Đã ký e-PoD'}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setViewingProofTx(tx)}
+                            className="text-[11px] font-bold text-cyan-700 hover:underline cursor-pointer shrink-0 ml-2"
+                          >
+                            Xem e-PoD
+                          </button>
                         </div>
+                      ) : (
                         <button
                           type="button"
-                          onClick={() => setViewingProofTx(tx)}
-                          className="text-[11px] font-bold text-cyan-700 hover:underline cursor-pointer shrink-0 ml-2"
+                          onClick={() => {
+                            setTargetTxForSignature(tx);
+                            setSignedName(
+                              tx.customerName
+                                ? `${tx.customerName} (Chủ Garage)`
+                                : 'Chủ Garage / Người nhận'
+                            );
+                            clearCanvas();
+                            setShowSignatureModal(true);
+                          }}
+                          className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-cyan-900 text-xs font-bold cursor-pointer"
                         >
-                          Xem e-PoD
+                          <PenTool className="w-3 h-3" />
+                          <span>Ký nhận e-PoD</span>
                         </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTargetTxForSignature(tx);
-                          setSignedName(
-                            tx.customerName
-                              ? `${tx.customerName} (Chủ Garage)`
-                              : 'Chủ Garage / Người nhận'
-                          );
-                          clearCanvas();
-                          setShowSignatureModal(true);
-                        }}
-                        className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-cyan-800 text-xs font-bold cursor-pointer"
-                      >
-                        <PenTool className="w-3 h-3" />
-                        <span>Ký nhận e-PoD</span>
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
             {/* Desktop Transactions Table */}
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-200">
+                  <tr className="bg-slate-50 text-[11px] font-bold text-slate-600 uppercase border-b border-slate-200">
                     <th className="py-2.5 px-3">Mã GD</th>
                     <th className="py-2.5 px-3">Điểm Bán / Garage</th>
                     <th className="py-2.5 px-3 text-cyan-800">Giao (+)</th>
                     <th className="py-2.5 px-3 text-emerald-800">Thu (-)</th>
-                    <th className="py-2.5 px-3">Tồn Vỏ Sau GD</th>
+                    <th className="py-2.5 px-3">Tồn Sau GD</th>
                     <th className="py-2.5 px-3">Ký Nhận Điện Tử (e-PoD)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paginatedTransactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.id}</td>
-                      <td className="py-3 px-3 font-semibold text-slate-900">{tx.customerName}</td>
-                      <td className="py-3 px-3 font-mono font-bold text-cyan-700">
-                        {tx.delivered > 0 ? `+${tx.delivered}` : '-'}
-                      </td>
-                      <td className="py-3 px-3 font-mono font-bold text-emerald-700">
-                        {tx.returned > 0 ? `-${tx.returned}` : '-'}
-                      </td>
-                      <td className="py-3 px-3 font-mono font-extrabold text-slate-900">
-                        {tx.balanceAfter} vỏ
-                      </td>
-                      <td className="py-3 px-3 text-slate-500">
-                        {tx.signature ? (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span className="font-bold text-emerald-900 truncate max-w-[130px]">
-                                {tx.signedBy || 'Đã ký e-PoD'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-slate-400 font-mono">{tx.timestamp}</span>
-                              <button
-                                type="button"
-                                onClick={() => setViewingProofTx(tx)}
-                                className="text-[10px] font-bold text-cyan-700 hover:text-cyan-900 hover:underline cursor-pointer"
-                              >
-                                Xem e-PoD
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTargetTxForSignature(tx);
-                                setSignedName(
-                                  tx.customerName
-                                    ? `${tx.customerName} (Chủ Garage)`
-                                    : 'Chủ Garage / Người nhận'
-                                );
-                                clearCanvas();
-                                setShowSignatureModal(true);
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-cyan-800 text-[11px] font-bold transition shadow-2xs cursor-pointer"
-                            >
-                              <PenTool className="w-3 h-3 text-cyan-700" />
-                              <span>Ký nhận e-PoD</span>
-                            </button>
-                            <div className="text-[10px] text-slate-400 font-mono">{tx.timestamp}</div>
-                          </div>
-                        )}
+                  {paginatedTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-slate-400">
+                        Không tìm thấy giao dịch nào.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    paginatedTransactions.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.id}</td>
+                        <td className="py-3 px-3 font-semibold text-slate-900">{tx.customerName}</td>
+                        <td className="py-3 px-3 font-mono font-bold text-cyan-700">
+                          {tx.delivered > 0 ? `+${tx.delivered}` : '-'}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-bold text-emerald-700">
+                          {tx.returned > 0 ? `-${tx.returned}` : '-'}
+                        </td>
+                        <td className="py-3 px-3 font-mono font-extrabold text-slate-900">
+                          {tx.balanceAfter} vỏ
+                        </td>
+                        <td className="py-3 px-3 text-slate-500">
+                          {tx.signature ? (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span className="font-bold text-emerald-900 truncate max-w-[130px]">
+                                  {tx.signedBy || 'Đã ký e-PoD'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-slate-400 font-mono">{tx.timestamp}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingProofTx(tx)}
+                                  className="text-[10px] font-bold text-cyan-700 hover:text-cyan-900 hover:underline cursor-pointer"
+                                >
+                                  Xem e-PoD
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTargetTxForSignature(tx);
+                                  setSignedName(
+                                    tx.customerName
+                                      ? `${tx.customerName} (Chủ Garage)`
+                                      : 'Chủ Garage / Người nhận'
+                                  );
+                                  clearCanvas();
+                                  setShowSignatureModal(true);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-cyan-900 text-[11px] font-bold transition cursor-pointer"
+                              >
+                                <PenTool className="w-3 h-3 text-cyan-700" />
+                                <span>Ký nhận e-PoD</span>
+                              </button>
+                              <div className="text-[10px] text-slate-400 font-mono">{tx.timestamp}</div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-100 mt-4">
+          <div className="pt-3 border-t border-slate-100">
             <Pagination
               currentPage={txCurrentPage}
               totalPages={txTotalPages}
@@ -599,10 +1250,10 @@ export default function DrumsView({
         </div>
       </div>
 
-      {/* 4. Digital Signature Pad Modal */}
+      {/* 5. Digital Signature Pad Modal */}
       {showSignatureModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
@@ -624,7 +1275,7 @@ export default function DrumsView({
                   setShowSignatureModal(false);
                   setTargetTxForSignature(null);
                 }}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -638,7 +1289,7 @@ export default function DrumsView({
                 type="text"
                 value={signedName}
                 onChange={(e) => setSignedName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-900"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-cyan-600"
               />
             </div>
 
@@ -655,7 +1306,7 @@ export default function DrumsView({
               </div>
 
               {/* HTML5 Canvas Signature Pad */}
-              <div className="border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 overflow-hidden relative cursor-crosshair">
+              <div className="border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50 overflow-hidden relative cursor-crosshair">
                 <canvas
                   ref={canvasRef}
                   width={380}
@@ -670,8 +1321,8 @@ export default function DrumsView({
                   className="w-full h-[140px] touch-none"
                 />
                 {!hasSignature && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs">
-                    Ký tên tại đây
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-400 text-xs font-medium">
+                    ✍️ Ký tên hoặc điểm chỉ tại đây
                   </div>
                 )}
               </div>
@@ -684,9 +1335,9 @@ export default function DrumsView({
                   setShowSignatureModal(false);
                   setTargetTxForSignature(null);
                 }}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
-                Đóng
+                Hủy bỏ
               </button>
               <button
                 type="button"
@@ -714,7 +1365,7 @@ export default function DrumsView({
                   soundFX.playSuccess();
                   setShowSignatureModal(false);
                 }}
-                className="px-5 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-bold shadow-xs cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-bold shadow-md cursor-pointer"
               >
                 Lưu Chữ Ký Vào Biên Bản e-PoD
               </button>
@@ -723,21 +1374,21 @@ export default function DrumsView({
         </div>
       )}
 
-      {/* 5. Viewing Electronic Proof of Delivery (e-PoD) Modal */}
+      {/* 6. Viewing Electronic Proof of Delivery (e-PoD) Modal */}
       {viewingProofTx && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider mb-1">
-                  <ShieldCheck className="w-3 h-3 text-emerald-700" />
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-black uppercase tracking-wider mb-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
                   <span>Chứng Từ Bàn Giao Hợp Pháp (e-PoD)</span>
                 </div>
-                <h4 className="font-bold text-slate-900 text-base">
+                <h4 className="font-black text-slate-900 text-base">
                   Biên Bản Giao Nhận &amp; Đối Soát Vỏ Phuy
                 </h4>
                 <p className="text-xs text-slate-500 font-mono">
-                  Mã chứng từ: #{viewingProofTx.id} · Thời gian: {viewingProofTx.timestamp}
+                  Mã chứng từ: #{viewingProofTx.id} · {viewingProofTx.timestamp}
                 </p>
               </div>
               <button
@@ -749,7 +1400,7 @@ export default function DrumsView({
               </button>
             </div>
 
-            <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
               <div className="flex justify-between border-b border-slate-200/60 pb-2">
                 <span className="text-slate-500">Khách hàng / Garage:</span>
                 <span className="font-bold text-slate-900">{viewingProofTx.customerName}</span>
@@ -766,16 +1417,27 @@ export default function DrumsView({
                   {viewingProofTx.returned > 0 ? `-${viewingProofTx.returned} vỏ rỗng` : '0 vỏ'}
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between border-b border-slate-200/60 pb-2">
+                <span className="text-slate-500">Biến động cọc thế chân:</span>
+                <span className="font-mono font-bold text-slate-900">
+                  {(() => {
+                    const diff = ((viewingProofTx.delivered || 0) - (viewingProofTx.returned || 0)) * DEPOSIT_PRICE_PER_DRUM;
+                    if (diff > 0) return `Khách cọc thêm: +${formatVND(diff)}`;
+                    if (diff < 0) return `Hoàn cọc cho khách: -${formatVND(Math.abs(diff))}`;
+                    return 'Cân bằng cọc (0 đ)';
+                  })()}
+                </span>
+              </div>
+              <div className="flex justify-between pt-1">
                 <span className="text-slate-700 font-bold">Số vỏ khách lưu giữ sau bàn giao:</span>
-                <span className="font-mono font-extrabold text-sm text-slate-900">
+                <span className="font-mono font-black text-sm text-slate-900">
                   {viewingProofTx.balanceAfter} vỏ
                 </span>
               </div>
             </div>
 
             {/* Signature Proof Card */}
-            <div className="p-4 bg-white border-2 border-emerald-300 rounded-xl space-y-2">
+            <div className="p-4 bg-white border-2 border-emerald-300 rounded-2xl space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800">Chữ ký điện tử người nhận hàng:</span>
                 <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
@@ -783,7 +1445,7 @@ export default function DrumsView({
                   <span>Xác thực hiện trường</span>
                 </span>
               </div>
-              <div className="h-28 w-full bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center p-2">
+              <div className="h-28 w-full bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-center p-2">
                 {viewingProofTx.signature ? (
                   <img
                     src={viewingProofTx.signature}
@@ -804,15 +1466,15 @@ export default function DrumsView({
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>In Chứng Từ e-PoD</span>
+                <span>In Biên Bản e-PoD</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewingProofTx(null)}
-                className="px-5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
               >
                 Đóng
               </button>

@@ -33,6 +33,7 @@ export type RemixStaffUser = {
   id: string;
   name: string | null;
   email: string;
+  phone?: string | null;
   role: UserRole;
   createdAt: string;
 };
@@ -71,6 +72,7 @@ const fetchRemixBootstrap = async (): Promise<RemixBootstrap> => {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         createdAt: true,
       },
@@ -95,6 +97,7 @@ const fetchRemixBootstrap = async (): Promise<RemixBootstrap> => {
       id: u.id,
       name: u.name,
       email: u.email,
+      phone: u.phone,
       role: u.role,
       createdAt: u.createdAt.toISOString(),
     })),

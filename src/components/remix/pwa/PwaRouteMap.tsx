@@ -1,10 +1,16 @@
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Customer, VisitDayOfWeek } from '../../types';
+import { Customer } from '../../types';
 import { calculateHaversineDistance, formatVND } from '../../mockData';
 import { CHECK_IN_MAX_DISTANCE_M } from '@/lib/geo';
+import {
+  formatVisitDateLabel,
+  formatVisitDateLocal,
+  startOfWeekMonday,
+  todayVisitDateLocal,
+  weekDatesFromStart,
+} from '@/lib/visit-plan';
 import { soundFX } from '../../utils/audio';
-import { updateCustomerVisitDays } from '@/app/(private)/khach-hang/actions';
 import {
   MapPin,
   Navigation,
@@ -27,8 +33,8 @@ import {
   Image as ImageIcon,
   Trash2,
   Calendar,
-  Check,
-  Sparkles,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -72,94 +78,36 @@ export default function PwaRouteMap({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Customer visit days local state for instant optimistic updates
-  const [customerVisitDaysMap, setCustomerVisitDaysMap] = useState<Record<string, VisitDayOfWeek[]>>(() => {
-    const map: Record<string, VisitDayOfWeek[]> = {};
-    customers.forEach((c) => {
-      map[c.id] = c.visitDays && c.visitDays.length > 0
-        ? c.visitDays
-        : c.visitDay
-          ? [c.visitDay]
-          : [];
-    });
-    return map;
-  });
-  const [isSavingDays, setIsSavingDays] = useState(false);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const todayIso = todayVisitDateLocal();
+  const [weekStart, setWeekStart] = useState(() => startOfWeekMonday(new Date()));
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso);
+  const [viewMode, setViewMode] = useState<'day' | 'upcoming'>('day');
 
-  // Sync state if customers prop changes
-  useEffect(() => {
-    setCustomerVisitDaysMap((prev) => {
-      const next = { ...prev };
-      customers.forEach((c) => {
-        if (!next[c.id]) {
-          next[c.id] = c.visitDays && c.visitDays.length > 0
-            ? c.visitDays
-            : c.visitDay
-              ? [c.visitDay]
-              : [];
-        }
-      });
+  const weekDates = useMemo(() => weekDatesFromStart(weekStart), [weekStart]);
+
+  const filteredBeatCustomers = useMemo(() => {
+    if (viewMode === 'upcoming') {
+      return customers.filter((c) =>
+        (c.visitDates ?? []).some((d) => d >= todayIso),
+      );
+    }
+    return customers.filter((c) => (c.visitDates ?? []).includes(selectedDate));
+  }, [customers, selectedDate, viewMode, todayIso]);
+
+  const shiftWeek = (deltaWeeks: number) => {
+    setWeekStart((prev) => {
+      const next = new Date(prev);
+      next.setDate(prev.getDate() + deltaWeeks * 7);
       return next;
     });
-  }, [customers]);
-
-  const getTodayKey = (): 'T2' | 'T3' | 'T4' | 'T5' | 'T6' | 'T7' => {
-    const day = new Date().getDay();
-    if (day === 2) return 'T3';
-    if (day === 3) return 'T4';
-    if (day === 4) return 'T5';
-    if (day === 5) return 'T6';
-    if (day === 6) return 'T7';
-    return 'T2';
   };
 
-  const todayKey = getTodayKey();
-  const [selectedDay, setSelectedDay] = useState<string>('today');
-
-  const activeBeatDay = selectedDay === 'today' ? todayKey : selectedDay;
-  const filteredBeatCustomers = useMemo(() => {
-    if (selectedDay === 'all') return customers;
-    return customers.filter((c: Customer) => {
-      const days = customerVisitDaysMap[c.id] || c.visitDays || (c.visitDay ? [c.visitDay] : []);
-      return days.includes(activeBeatDay as VisitDayOfWeek);
-    });
-  }, [customers, selectedDay, activeBeatDay, customerVisitDaysMap]);
-
-  // Handler to toggle a visit day for active customer
-  const handleToggleVisitDay = async (day: VisitDayOfWeek) => {
-    const currentDays = customerVisitDaysMap[activeCustomer.id] || activeCustomer.visitDays || (activeCustomer.visitDay ? [activeCustomer.visitDay] : []);
-    const isDayActive = currentDays.includes(day);
-    const nextDays: VisitDayOfWeek[] = isDayActive
-      ? currentDays.filter((d) => d !== day)
-      : [...currentDays, day].sort((a, b) => {
-          const order: Record<VisitDayOfWeek, number> = { T2: 2, T3: 3, T4: 4, T5: 5, T6: 6, T7: 7 };
-          return order[a] - order[b];
-        });
-
-    setCustomerVisitDaysMap((prev) => ({
-      ...prev,
-      [activeCustomer.id]: nextDays,
-    }));
-    activeCustomer.visitDays = nextDays;
-    if (nextDays.length > 0) {
-      activeCustomer.visitDay = nextDays[0];
+  const getCustomerVisitBadges = (c: Customer): string[] => {
+    const dates = c.visitDates ?? [];
+    if (viewMode === 'upcoming') {
+      return dates.filter((d) => d >= todayIso).slice(0, 3);
     }
-
-    soundFX.playClick();
-    setIsSavingDays(true);
-
-    try {
-      const res = await updateCustomerVisitDays(activeCustomer.id, nextDays);
-      if (res.success) {
-        setSaveNotice(`Đã lưu lịch ghé: ${nextDays.length > 0 ? nextDays.join(', ') : 'Chưa xếp lịch'}`);
-        setTimeout(() => setSaveNotice(null), 3000);
-      }
-    } catch (err) {
-      console.error('Failed to update visit days:', err);
-    } finally {
-      setIsSavingDays(false);
-    }
+    return dates.includes(selectedDate) ? [selectedDate] : [];
   };
 
   const beatTotal = filteredBeatCustomers.length;
@@ -612,7 +560,7 @@ export default function PwaRouteMap({
                       Lịch Tuyến Bán Hàng MCP ({filteredBeatCustomers.length} điểm)
                     </h3>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      Gán Ngày ghé (T2–T7) trên trang Khách hàng để hiện trong tuyến
+                      Thêm ngày ghé cụ thể trên trang Khách hàng để hiện trong tuyến
                     </div>
                   </div>
                 </div>
@@ -624,43 +572,74 @@ export default function PwaRouteMap({
                 </div>
               </div>
 
-              {/* Day selection tabs */}
+              {/* Calendar week navigation */}
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => shiftWeek(-1)}
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                  title="Tuần trước"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs font-bold text-slate-600 font-mono">
+                  {formatVisitDateLabel(weekDates[0]!)} – {formatVisitDateLabel(weekDates[6]!)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => shiftWeek(1)}
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                  title="Tuần sau"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                 <button
                   type="button"
-                  onClick={() => setSelectedDay('today')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition cursor-pointer flex items-center gap-1 ${
-                    selectedDay === 'today'
+                  onClick={() => {
+                    setViewMode('day');
+                    setSelectedDate(todayIso);
+                    setWeekStart(startOfWeekMonday(new Date()));
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition cursor-pointer ${
+                    viewMode === 'day' && selectedDate === todayIso
                       ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  <span>Hôm nay ({todayKey})</span>
+                  Hôm nay
                 </button>
-                {(['T2', 'T3', 'T4', 'T5', 'T6', 'T7'] as const).map((day) => (
+                {weekDates.map((iso) => (
                   <button
-                    key={day}
+                    key={iso}
                     type="button"
-                    onClick={() => setSelectedDay(day)}
+                    onClick={() => {
+                      setViewMode('day');
+                      setSelectedDate(iso);
+                    }}
                     className={`px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition cursor-pointer ${
-                      selectedDay === day
+                      viewMode === 'day' && selectedDate === iso
                         ? 'bg-slate-900 text-white font-black shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        : iso === todayIso
+                          ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
-                    Thứ {day === 'T7' ? '7' : day.slice(1)}
+                    {formatVisitDateLabel(iso)}
                   </button>
                 ))}
                 <button
                   type="button"
-                  onClick={() => setSelectedDay('all')}
+                  onClick={() => setViewMode('upcoming')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition cursor-pointer ${
-                    selectedDay === 'all'
+                    viewMode === 'upcoming'
                       ? 'bg-slate-900 text-white font-black shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  Tất cả ({customers.length})
+                  Sắp tới
                 </button>
               </div>
 
@@ -678,10 +657,12 @@ export default function PwaRouteMap({
               {filteredBeatCustomers.length === 0 ? (
                 <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
                   <p className="text-sm font-bold text-slate-700">
-                    Chưa có khách trong tuyến ngày này
+                    {viewMode === 'upcoming'
+                      ? 'Chưa có lịch ghé sắp tới'
+                      : `Chưa có khách ngày ${formatVisitDateLabel(selectedDate)}`}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Gán Ngày ghé trên Khách hàng để điểm bán xuất hiện ở đây.
+                    Thêm ngày ghé cụ thể trên Khách hàng để điểm bán xuất hiện ở đây.
                   </p>
                 </div>
               ) : (
@@ -735,24 +716,24 @@ export default function PwaRouteMap({
                         {c.address}
                       </div>
 
-                      {/* Scheduled visit days chips on card */}
+                      {/* Scheduled visit date badges */}
                       <div className="mt-2 flex flex-wrap items-center gap-1">
-                        {((customerVisitDaysMap[c.id] || c.visitDays || (c.visitDay ? [c.visitDay] : [])).length > 0) ? (
-                          (customerVisitDaysMap[c.id] || c.visitDays || (c.visitDay ? [c.visitDay] : [])).map((day) => (
+                        {getCustomerVisitBadges(c).length > 0 ? (
+                          getCustomerVisitBadges(c).map((iso) => (
                             <span
-                              key={day}
+                              key={iso}
                               className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
                                 isSelected
                                   ? 'bg-slate-800 text-amber-300 border border-slate-700'
                                   : 'bg-slate-200/80 text-slate-700'
                               }`}
                             >
-                              {day}
+                              {formatVisitDateLabel(iso)}
                             </span>
                           ))
                         ) : (
                           <span className={`text-[10px] italic ${isSelected ? 'text-slate-400' : 'text-slate-400'}`}>
-                            Chưa gán ngày
+                            Chưa có lịch
                           </span>
                         )}
                       </div>
@@ -821,86 +802,32 @@ export default function PwaRouteMap({
               </button>
             </div>
 
-            {/* Visit Days Route Schedule Management (MCP) */}
+            {/* Upcoming visit dates (read-only; manage on Customers page) */}
             <div className="p-4 rounded-2xl bg-linear-to-br from-slate-50 via-slate-50 to-amber-50/30 border border-slate-200/80 space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-700">
-                    Lịch Ghé Tuyến Tuần Này (MCP)
-                  </span>
-                </div>
-                {saveNotice ? (
-                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md animate-in fade-in flex items-center gap-1">
-                    <Check className="w-3 h-3" />
-                    <span>{saveNotice}</span>
-                  </span>
-                ) : isSavingDays ? (
-                  <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 animate-spin" />
-                    <span>Đang lưu...</span>
-                  </span>
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-amber-500 shrink-0" />
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+                  Lịch ghé đã gán
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(activeCustomer.visitDates ?? []).length > 0 ? (
+                  (activeCustomer.visitDates ?? []).map((iso) => (
+                    <span
+                      key={iso}
+                      className="text-[11px] font-mono font-bold px-2 py-1 rounded-lg bg-white border border-slate-200 text-slate-800"
+                    >
+                      {formatVisitDateLabel(iso)}
+                    </span>
+                  ))
                 ) : (
-                  <span className="text-[11px] font-medium text-slate-400">
-                    Chạm để đổi ngày ghé
-                  </span>
+                  <span className="text-xs text-slate-500 italic">Chưa có ngày ghé</span>
                 )}
               </div>
-
-              {/* 6 Weekday Toggle Chips */}
-              <div className="grid grid-cols-6 gap-1.5">
-                {(['T2', 'T3', 'T4', 'T5', 'T6', 'T7'] as const).map((day) => {
-                  const currentDays = customerVisitDaysMap[activeCustomer.id] || activeCustomer.visitDays || (activeCustomer.visitDay ? [activeCustomer.visitDay] : []);
-                  const isActive = currentDays.includes(day);
-                  const dayLabels: Record<string, string> = {
-                    T2: 'Thứ 2',
-                    T3: 'Thứ 3',
-                    T4: 'Thứ 4',
-                    T5: 'Thứ 5',
-                    T6: 'Thứ 6',
-                    T7: 'Thứ 7',
-                  };
-
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => handleToggleVisitDay(day)}
-                      disabled={isSavingDays}
-                      className={`relative py-2.5 px-1 rounded-xl text-center flex flex-col items-center justify-center transition-all cursor-pointer select-none ${
-                        isActive
-                          ? 'bg-amber-500 text-slate-950 font-black shadow-sm ring-2 ring-amber-400 ring-offset-1 scale-[1.02]'
-                          : 'bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold hover:text-slate-900'
-                      }`}
-                      title={`${dayLabels[day]} - Nhấn để ${isActive ? 'bỏ chọn' : 'thêm vào tuyến'}`}
-                    >
-                      <span className="text-xs sm:text-sm font-black font-mono leading-none">
-                        {day}
-                      </span>
-                      <span className={`text-[10px] mt-1 font-medium leading-none ${isActive ? 'text-slate-950/80 font-bold' : 'text-slate-400'}`}>
-                        {dayLabels[day].replace('Thứ ', 'T')}
-                      </span>
-                      {isActive && (
-                        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-slate-950 text-white flex items-center justify-center text-[8px]">
-                          ✓
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="text-[11px] text-slate-500 flex items-center justify-between">
-                <span>
-                  Đang gán:{' '}
-                  <strong className="text-slate-800 font-mono">
-                    {((customerVisitDaysMap[activeCustomer.id] || activeCustomer.visitDays || (activeCustomer.visitDay ? [activeCustomer.visitDay] : [])).join(', ')) || 'Chưa gán ngày ghé'}
-                  </strong>
-                </span>
-                <span className="text-slate-400 italic">
-                  Tuần này T3, tuần sau T4 đổi tự do
-                </span>
-              </div>
+              <p className="text-[11px] text-slate-500">
+                Thêm hoặc sửa ngày ghé trên trang Khách hàng (vd. tuần này{' '}
+                {formatVisitDateLocal(new Date())}, tuần sau chọn ngày khác).
+              </p>
             </div>
 
             {/* Distance Metric & Geofence Status (Redesigned with NO awkward text wrap) */}

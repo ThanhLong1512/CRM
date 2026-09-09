@@ -426,6 +426,45 @@ async function main() {
   }
   console.log(`Seeded ${customers.length} customers.`);
 
+  function seedVisitDate(daysFromToday: number): Date {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + daysFromToday);
+    return d;
+  }
+
+  const visitPlanSeed: Array<{
+    customerId: string;
+    daysFromToday: number;
+    note?: string;
+  }> = [
+    { customerId: "seed-c01", daysFromToday: 0 },
+    { customerId: "seed-c02", daysFromToday: 1 },
+    { customerId: "seed-c03", daysFromToday: 0 },
+    { customerId: "seed-c04", daysFromToday: 2 },
+    { customerId: "seed-c05", daysFromToday: 0 },
+    { customerId: "seed-c05", daysFromToday: 7, note: "Tuần sau ghé lại" },
+  ];
+
+  for (const item of visitPlanSeed) {
+    const visitDate = seedVisitDate(item.daysFromToday);
+    await prisma.customerVisitPlan.upsert({
+      where: {
+        customerId_visitDate: {
+          customerId: item.customerId,
+          visitDate,
+        },
+      },
+      update: { note: item.note ?? null },
+      create: {
+        customerId: item.customerId,
+        visitDate,
+        note: item.note ?? null,
+      },
+    });
+  }
+  console.log(`Seeded ${visitPlanSeed.length} customer visit plans.`);
+
   const productBySku = Object.fromEntries(
     (
       await prisma.product.findMany({

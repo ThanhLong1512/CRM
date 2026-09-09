@@ -41,6 +41,10 @@ import { soundFX } from "@/components/utils/audio";
 import { ActionMenu, PageActionMenu, type ActionMenuItem } from "@/components/common/ActionMenu";
 import { Pagination } from "@/components/common/Pagination";
 import { usePagination } from "@/hooks/usePagination";
+import {
+  VisitDatesEditor,
+  type VisitPlanItem,
+} from "@/components/customers/VisitDatesEditor";
 
 export type CustomerFormInput = {
   name: string;
@@ -51,7 +55,6 @@ export type CustomerFormInput = {
   creditTermDays?: number;
   lat: string;
   lng: string;
-  visitDay: "" | "T2" | "T3" | "T4" | "T5" | "T6" | "T7";
 };
 
 interface CustomersViewProps {
@@ -60,6 +63,7 @@ interface CustomersViewProps {
   onNavigateToSales: (customerId: string) => void;
   onCreateCustomer: (input: CustomerFormInput) => void;
   onUpdateCustomer: (customerId: string, input: CustomerFormInput) => void;
+  onVisitPlansUpdated?: (customerId: string, plans: VisitPlanItem[]) => void;
   onDeleteCustomer: (customerId: string) => void;
   onPayDebt?: (customerId: string, amount: number) => void;
   sessionUser?: AuthUserProfile | null;
@@ -83,7 +87,6 @@ function emptyForm(): CustomerFormInput {
     creditTermDays: 30,
     lat: "",
     lng: "",
-    visitDay: "",
   };
 }
 
@@ -93,6 +96,7 @@ export default function CustomersView({
   onNavigateToSales,
   onCreateCustomer,
   onUpdateCustomer,
+  onVisitPlansUpdated,
   onDeleteCustomer,
   onPayDebt,
   sessionUser,
@@ -113,6 +117,7 @@ export default function CustomersView({
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [formCustomerId, setFormCustomerId] = useState<string | null>(null);
   const [form, setForm] = useState<CustomerFormInput>(emptyForm);
+  const [editVisitPlans, setEditVisitPlans] = useState<VisitPlanItem[]>([]);
   const [zaloCustomer, setZaloCustomer] = useState<Customer | null>(null);
 
   // Credit Hard-lock & Override Modal State
@@ -208,8 +213,8 @@ export default function CustomersView({
       creditTermDays: c.creditTermDays ?? 30,
       lat: c.hasGps && c.lat ? String(c.lat) : "",
       lng: c.hasGps && c.lng ? String(c.lng) : "",
-      visitDay: c.visitDay ?? "",
     });
+    setEditVisitPlans(c.visitPlans ?? []);
     setFormOpen(true);
   };
 
@@ -838,29 +843,21 @@ export default function CustomersView({
                   />
                 </div>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700">
-                  Ngày ghé tuyến MCP
-                </label>
-                <select
-                  value={form.visitDay}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      visitDay: e.target.value as CustomerFormInput["visitDay"],
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-900"
-                >
-                  <option value="">Chưa gán</option>
-                  <option value="T2">T2 — Thứ 2</option>
-                  <option value="T3">T3 — Thứ 3</option>
-                  <option value="T4">T4 — Thứ 4</option>
-                  <option value="T5">T5 — Thứ 5</option>
-                  <option value="T6">T6 — Thứ 6</option>
-                  <option value="T7">T7 — Thứ 7</option>
-                </select>
-              </div>
+              {formMode === "edit" && formCustomerId ? (
+                <VisitDatesEditor
+                  customerId={formCustomerId}
+                  plans={editVisitPlans}
+                  onPlansChange={(plans) => {
+                    setEditVisitPlans(plans);
+                    onVisitPlansUpdated?.(formCustomerId, plans);
+                  }}
+                />
+              ) : (
+                <p className="text-xs text-slate-500 italic rounded-xl border border-dashed border-slate-200 px-3 py-2">
+                  Sau khi tạo khách hàng, mở Sửa để thêm các ngày ghé cụ thể trên
+                  lịch.
+                </p>
+              )}
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
               <button

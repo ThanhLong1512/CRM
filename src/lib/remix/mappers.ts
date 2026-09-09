@@ -125,15 +125,15 @@ export function mapCustomerDto(
   rfm?: RfmCustomerDto,
 ): Customer {
   const hasGps = dto.lat != null && dto.lng != null;
-  const visitDay = dto.visitDay ?? undefined;
-  const routeNames = {
-    T2: "Tuyến T2: QL1A - Hóc Môn - Q12",
-    T3: "Tuyến T3: KCN Tân Bình - Vĩnh Lộc",
-    T4: "Tuyến T4: Bình Tân - Quận 6",
-    T5: "Tuyến T5: Củ Chi - Hóc Môn",
-    T6: "Tuyến T6: Cảng Cát Lái - TP. Thủ Đức",
-    T7: "Tuyến T7: Chăm sóc Đại lý VIP",
-  } as const;
+  const visitDates = dto.visitDates ?? [];
+  const visitPlans = dto.visitPlans ?? [];
+  const nextVisit = visitDates[0];
+  const routeLabel =
+    visitDates.length > 0
+      ? nextVisit
+        ? `Lịch ghé: ${visitDates.length} ngày (gần nhất ${nextVisit})`
+        : "Có lịch ghé"
+      : "Chưa có lịch ghé";
 
   return {
     id: dto.id,
@@ -145,13 +145,9 @@ export function mapCustomerDto(
     lat: dto.lat ?? 0,
     lng: dto.lng ?? 0,
     hasGps,
-    route: visitDay ? routeNames[visitDay] : "Chưa gán ngày ghé",
-    visitDay,
-    visitDays: dto.visitDays && dto.visitDays.length > 0
-      ? (dto.visitDays as VisitDayOfWeek[])
-      : visitDay
-        ? [visitDay]
-        : [],
+    route: routeLabel,
+    visitDates,
+    visitPlans,
     visitFrequency: "WEEKLY",
     creditLimit: dto.creditLimit,
     creditTermDays: dto.creditTermDays ?? 30,

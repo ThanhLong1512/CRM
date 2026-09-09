@@ -19,6 +19,12 @@ export type CustomerDto = {
   lng: number | null;
   visitDay?: "T2" | "T3" | "T4" | "T5" | "T6" | "T7" | null;
   visitDays?: ("T2" | "T3" | "T4" | "T5" | "T6" | "T7")[] | null;
+  visitDates?: string[];
+  visitPlans?: Array<{
+    id: string;
+    visitDate: string;
+    note?: string | null;
+  }>;
   createdAt?: string;
   updatedAt?: string;
 };

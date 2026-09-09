@@ -115,7 +115,6 @@ function customerToFormData(input: CustomerFormInput): FormData {
   if (input.creditTermDays) fd.set("creditTermDays", String(input.creditTermDays));
   if (input.lat) fd.set("lat", input.lat);
   if (input.lng) fd.set("lng", input.lng);
-  if (input.visitDay) fd.set("visitDay", input.visitDay);
   return fd;
 }
 
@@ -323,7 +322,6 @@ export default function RemixAppContainer({
         creditLimit: newLimit,
         lat: customer.hasGps && customer.lat ? String(customer.lat) : "",
         lng: customer.hasGps && customer.lng ? String(customer.lng) : "",
-        visitDay: customer.visitDay ?? "",
       });
       const result = await updateCustomer(customerId, fd);
       if (!result.success) {
@@ -349,7 +347,7 @@ export default function RemixAppContainer({
         lng: Number(input.lng) || 0,
         hasGps: Boolean(input.lat && input.lng),
         route: "",
-        visitDay: input.visitDay || undefined,
+        visitDates: [],
         creditLimit: input.creditLimit,
         currentDebt: 0,
         emptyDrums: 0,
@@ -386,7 +384,6 @@ export default function RemixAppContainer({
               lat: Number(input.lat) || 0,
               lng: Number(input.lng) || 0,
               hasGps: Boolean(input.lat && input.lng),
-              visitDay: input.visitDay || undefined,
             }
           : c,
       ),
@@ -404,6 +401,29 @@ export default function RemixAppContainer({
       toast.success(result.message);
       router.refresh();
     });
+  };
+
+  const handleVisitPlansUpdated = (
+    customerId: string,
+    plans: Array<{ id: string; visitDate: string; note?: string | null }>,
+  ) => {
+    const visitDates = plans.map((p) => p.visitDate).sort();
+    const nextVisit = visitDates[0];
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              visitPlans: plans,
+              visitDates,
+              route:
+                visitDates.length > 0
+                  ? `Lịch ghé: ${visitDates.length} ngày (gần nhất ${nextVisit})`
+                  : "Chưa có lịch ghé",
+            }
+          : c,
+      ),
+    );
   };
 
   const handleDeleteCustomer = (customerId: string) => {
@@ -1121,6 +1141,7 @@ export default function RemixAppContainer({
                 onNavigateToSales={handleNavigateToSales}
                 onCreateCustomer={handleCreateCustomer}
                 onUpdateCustomer={handleUpdateCustomerProfile}
+                onVisitPlansUpdated={handleVisitPlansUpdated}
                 onDeleteCustomer={handleDeleteCustomer}
                 onPayDebt={handlePayDebt}
                 sessionUser={resolvedSessionUser}

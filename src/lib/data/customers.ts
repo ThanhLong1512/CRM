@@ -1,5 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import type { CustomerDto } from "@/app/(private)/khach-hang/customer-query";
+import {
+  formatVisitDateLocal,
+  visitPlanWindow,
+} from "@/lib/visit-plan";
 import type { DebtAging } from "@/types";
 
 export function calculateDebtAging(
@@ -78,9 +82,25 @@ export function calculateDebtAging(
 }
 
 export async function listCustomers(): Promise<CustomerDto[]> {
+  const { from, to } = visitPlanWindow();
+
   const customers = await prisma.customer.findMany({
     orderBy: { name: "asc" },
     include: {
+      visitPlans: {
+        where: {
+          visitDate: {
+            gte: from,
+            lte: to,
+          },
+        },
+        orderBy: { visitDate: "asc" },
+        select: {
+          id: true,
+          visitDate: true,
+          note: true,
+        },
+      },
       orders: {
         where: {
           status: { in: ["PENDING", "CONFIRMED", "SHIPPED"] },
@@ -121,6 +141,13 @@ export async function listCustomers(): Promise<CustomerDto[]> {
 
     const debtAging = calculateDebtAging(currentDebt, creditTermDays, orderSummaries);
 
+    const visitPlans = customer.visitPlans.map((plan) => ({
+      id: plan.id,
+      visitDate: formatVisitDateLocal(new Date(plan.visitDate)),
+      note: plan.note,
+    }));
+    const visitDates = visitPlans.map((plan) => plan.visitDate);
+
     return {
       id: customer.id,
       name: customer.name,
@@ -144,6 +171,8 @@ export async function listCustomers(): Promise<CustomerDto[]> {
         : customer.visitDay
           ? [customer.visitDay]
           : [],
+      visitDates,
+      visitPlans,
       createdAt: customer.createdAt.toISOString(),
       updatedAt: customer.updatedAt.toISOString(),
     };
