@@ -50,7 +50,7 @@ interface SalesPWAViewProps {
     customerId: string;
     lat: number;
     lng: number;
-  }) => void;
+  }) => Promise<{ success: boolean; message: string; error?: string } | void>;
 }
 
 export default function SalesPWAView({
@@ -74,7 +74,7 @@ export default function SalesPWAView({
     selectedCustomerId || customers[0]?.id || 'C01'
   );
   const [checkedInCustomerIds, setCheckedInCustomerIds] = useState<Set<string>>(
-    new Set(['C01']) // Initial check-in for easy exploration
+    new Set(),
   );
 
   // Cart state: Record<productId, quantity>
@@ -141,19 +141,26 @@ export default function SalesPWAView({
     });
   };
 
-  // Check-In handler
-  const handleCheckInSuccess = (
+  // Check-In handler — only mark local success after server OK
+  const handleCheckInSuccess = async (
     cust: Customer,
     checkInData: { timestamp: string; lat: number; lng: number; accuracyMeters: number }
   ) => {
+    if (onPersistCheckIn) {
+      const result = await onPersistCheckIn({
+        customerId: cust.id,
+        lat: checkInData.lat,
+        lng: checkInData.lng,
+      });
+      if (result && !result.success) {
+        setToastMessage(`✗ ${result.error ?? result.message}`);
+        setTimeout(() => setToastMessage(null), 4000);
+        throw new Error(result.error ?? result.message);
+      }
+    }
     setCheckedInCustomerIds((prev) => new Set([...prev, cust.id]));
     setToastMessage(`✓ Check-in thành công tại ${cust.name} (${checkInData.timestamp})`);
     setTimeout(() => setToastMessage(null), 4000);
-    onPersistCheckIn?.({
-      customerId: cust.id,
-      lat: checkInData.lat,
-      lng: checkInData.lng,
-    });
   };
 
   // Submit Order from drawer

@@ -115,6 +115,7 @@ function customerToFormData(input: CustomerFormInput): FormData {
   if (input.creditTermDays) fd.set("creditTermDays", String(input.creditTermDays));
   if (input.lat) fd.set("lat", input.lat);
   if (input.lng) fd.set("lng", input.lng);
+  if (input.visitDay) fd.set("visitDay", input.visitDay);
   return fd;
 }
 
@@ -322,6 +323,7 @@ export default function RemixAppContainer({
         creditLimit: newLimit,
         lat: customer.hasGps && customer.lat ? String(customer.lat) : "",
         lng: customer.hasGps && customer.lng ? String(customer.lng) : "",
+        visitDay: customer.visitDay ?? "",
       });
       const result = await updateCustomer(customerId, fd);
       if (!result.success) {
@@ -347,6 +349,7 @@ export default function RemixAppContainer({
         lng: Number(input.lng) || 0,
         hasGps: Boolean(input.lat && input.lng),
         route: "",
+        visitDay: input.visitDay || undefined,
         creditLimit: input.creditLimit,
         currentDebt: 0,
         emptyDrums: 0,
@@ -383,6 +386,7 @@ export default function RemixAppContainer({
               lat: Number(input.lat) || 0,
               lng: Number(input.lng) || 0,
               hasGps: Boolean(input.lat && input.lng),
+              visitDay: input.visitDay || undefined,
             }
           : c,
       ),
@@ -609,19 +613,36 @@ export default function RemixAppContainer({
     });
   };
 
-  const handlePersistCheckIn = (input: {
+  const handlePersistCheckIn = async (input: {
     customerId: string;
     lat: number;
     lng: number;
   }) => {
-    startTransition(async () => {
-      const result = await createCheckIn(input);
-      if (!result.success) {
-        toast.error(result.error ?? result.message);
-        return;
-      }
-      toast.success(result.message);
-    });
+    const result = await createCheckIn(input);
+    if (!result.success) {
+      toast.error(result.error ?? result.message);
+      return result;
+    }
+    if (
+      result.pinnedGps &&
+      result.customerLat != null &&
+      result.customerLng != null
+    ) {
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === input.customerId
+            ? {
+                ...c,
+                lat: result.customerLat!,
+                lng: result.customerLng!,
+                hasGps: true,
+              }
+            : c,
+        ),
+      );
+    }
+    toast.success(result.message);
+    return result;
   };
 
   const handleUpdateVehicleKm = (

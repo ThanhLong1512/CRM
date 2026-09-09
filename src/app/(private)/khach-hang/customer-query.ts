@@ -17,6 +17,7 @@ export type CustomerDto = {
   creditOverrideApprovedBy?: string | null;
   lat: number | null;
   lng: number | null;
+  visitDay?: "T2" | "T3" | "T4" | "T5" | "T6" | "T7" | null;
   createdAt?: string;
   updatedAt?: string;
 };

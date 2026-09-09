@@ -11,14 +11,25 @@ export type CheckInActionResult = {
   message: string;
   error?: string;
   distanceM?: number;
+  pinnedGps?: boolean;
+  customerLat?: number;
+  customerLng?: number;
 };
 
 function fail(message: string): CheckInActionResult {
   return { success: false, message, error: message };
 }
 
-function ok(message: string, distanceM: number): CheckInActionResult {
-  return { success: true, message, distanceM };
+function ok(
+  message: string,
+  extras: {
+    distanceM: number;
+    pinnedGps?: boolean;
+    customerLat?: number;
+    customerLng?: number;
+  },
+): CheckInActionResult {
+  return { success: true, message, ...extras };
 }
 
 export async function createCheckIn(input: {
@@ -58,21 +69,53 @@ export async function createCheckIn(input: {
   if (!customer) {
     return fail("Không tìm thấy khách hàng.");
   }
-  if (customer.lat == null || customer.lng == null) {
-    return fail("Khách hàng chưa có tọa độ GPS trên hệ thống.");
-  }
 
-  const customerLat = Number(customer.lat);
-  const customerLng = Number(customer.lng);
-  const distanceM = haversineMeters(lat, lng, customerLat, customerLng);
-
-  if (distanceM > CHECK_IN_MAX_DISTANCE_M) {
-    return fail(
-      `Quá xa điểm khách hàng (${Math.round(distanceM)}m). Cần đứng trong bán kính ${CHECK_IN_MAX_DISTANCE_M}m để check-in.`,
-    );
-  }
+  const needsPin = customer.lat == null || customer.lng == null;
 
   try {
+    if (needsPin) {
+      await prisma.$transaction([
+        prisma.customer.update({
+          where: { id: customerId },
+          data: {
+            lat: new Prisma.Decimal(lat),
+            lng: new Prisma.Decimal(lng),
+          },
+        }),
+        prisma.visitCheckIn.create({
+          data: {
+            customerId,
+            userId: dbUser.id,
+            lat: new Prisma.Decimal(lat),
+            lng: new Prisma.Decimal(lng),
+            distanceM: 0,
+          },
+        }),
+      ]);
+
+      revalidatePath("/sales");
+      revalidatePath("/khach-hang");
+      return ok(
+        `Đã cắm GPS và check-in tại “${customer.name}”.`,
+        {
+          distanceM: 0,
+          pinnedGps: true,
+          customerLat: lat,
+          customerLng: lng,
+        },
+      );
+    }
+
+    const customerLat = Number(customer.lat);
+    const customerLng = Number(customer.lng);
+    const distanceM = haversineMeters(lat, lng, customerLat, customerLng);
+
+    if (distanceM > CHECK_IN_MAX_DISTANCE_M) {
+      return fail(
+        `Quá xa điểm khách hàng (${Math.round(distanceM)}m). Cần đứng trong bán kính ${CHECK_IN_MAX_DISTANCE_M}m để check-in.`,
+      );
+    }
+
     await prisma.visitCheckIn.create({
       data: {
         customerId,
@@ -82,6 +125,17 @@ export async function createCheckIn(input: {
         distanceM,
       },
     });
+
+    revalidatePath("/sales");
+    return ok(
+      `Check-in thành công tại “${customer.name}” (cách ${Math.round(distanceM)}m).`,
+      {
+        distanceM,
+        pinnedGps: false,
+        customerLat,
+        customerLng,
+      },
+    );
   } catch (error) {
     return fail(
       error instanceof Error
@@ -89,10 +143,4 @@ export async function createCheckIn(input: {
         : "Không thể lưu check-in. Vui lòng thử lại.",
     );
   }
-
-  revalidatePath("/sales");
-  return ok(
-    `Check-in thành công tại “${customer.name}” (cách ${Math.round(distanceM)}m).`,
-    distanceM,
-  );
 }

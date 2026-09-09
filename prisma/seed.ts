@@ -3,6 +3,7 @@ import {
   PrismaClient,
   type CustomerType,
   type UserRole,
+  type VisitDayOfWeek,
 } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -131,6 +132,7 @@ const customers: Array<{
   outstandingDrums: number;
   lat: number | null;
   lng: number | null;
+  visitDay: VisitDayOfWeek;
 }> = [
   {
     id: "seed-c01",
@@ -143,6 +145,7 @@ const customers: Array<{
     outstandingDrums: 4,
     lat: 10.732534,
     lng: 106.702049,
+    visitDay: "T2",
   },
   {
     id: "seed-c02",
@@ -155,6 +158,7 @@ const customers: Array<{
     outstandingDrums: 12,
     lat: 10.818218,
     lng: 106.63412,
+    visitDay: "T3",
   },
   {
     id: "seed-c03",
@@ -167,6 +171,7 @@ const customers: Array<{
     outstandingDrums: 2,
     lat: 10.804122,
     lng: 106.62145,
+    visitDay: "T4",
   },
   {
     id: "seed-c04",
@@ -179,6 +184,7 @@ const customers: Array<{
     outstandingDrums: 0,
     lat: 10.7854,
     lng: 106.68,
+    visitDay: "T5",
   },
   {
     id: "seed-c05",
@@ -189,8 +195,9 @@ const customers: Array<{
     creditLimit: 200_000_000,
     currentDebt: 68_000_000,
     outstandingDrums: 18,
-    lat: null,
-    lng: null,
+    lat: 10.68652,
+    lng: 106.57581,
+    visitDay: "T4",
   },
 ];
 
@@ -412,6 +419,7 @@ async function main() {
         outstandingDrums: customer.outstandingDrums,
         lat: customer.lat,
         lng: customer.lng,
+        visitDay: customer.visitDay,
       },
       create: customer,
     });

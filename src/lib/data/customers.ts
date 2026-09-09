@@ -138,6 +138,7 @@ export async function listCustomers(): Promise<CustomerDto[]> {
       creditOverrideApprovedBy: customer.creditOverrideApprovedBy,
       lat: customer.lat != null ? Number(customer.lat) : null,
       lng: customer.lng != null ? Number(customer.lng) : null,
+      visitDay: customer.visitDay,
       createdAt: customer.createdAt.toISOString(),
       updatedAt: customer.updatedAt.toISOString(),
     };

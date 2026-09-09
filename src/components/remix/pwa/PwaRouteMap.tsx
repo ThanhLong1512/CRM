@@ -1,7 +1,8 @@
 "use client";
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Customer } from '../../types';
 import { calculateHaversineDistance, formatVND } from '../../mockData';
+import { CHECK_IN_MAX_DISTANCE_M } from '@/lib/geo';
 import { soundFX } from '../../utils/audio';
 import {
   MapPin,
@@ -28,11 +29,23 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+const ALLOW_GPS_SIM = process.env.NODE_ENV === 'development';
+const DEFAULT_MAP_CENTER: [number, number] = [10.7769, 106.7009];
+
 interface PwaRouteMapProps {
   customers: Customer[];
   activeCustomer: Customer;
   onSelectCustomer: (customer: Customer) => void;
-  onCheckInSuccess: (customer: Customer, checkInData: { timestamp: string; lat: number; lng: number; accuracyMeters: number; photoBase64?: string }) => void;
+  onCheckInSuccess: (
+    customer: Customer,
+    checkInData: {
+      timestamp: string;
+      lat: number;
+      lng: number;
+      accuracyMeters: number;
+      photoBase64?: string;
+    },
+  ) => void | Promise<void>;
   checkedInCustomerIds: Set<string>;
   onNavigateToCatalog: () => void;
 }
@@ -45,18 +58,26 @@ export default function PwaRouteMap({
   checkedInCustomerIds,
   onNavigateToCatalog,
 }: PwaRouteMapProps) {
-  const [distanceMeters, setDistanceMeters] = useState<number>(28); // Default in-range 28m
-  const [isSimulatingGps, setIsSimulatingGps] = useState<boolean>(true);
+  const [distanceMeters, setDistanceMeters] = useState<number>(
+    ALLOW_GPS_SIM ? 28 : 9999,
+  );
+  const [isSimulatingGps, setIsSimulatingGps] = useState<boolean>(ALLOW_GPS_SIM);
+  const [hasGpsFix, setHasGpsFix] = useState<boolean>(ALLOW_GPS_SIM);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [checkInPhoto, setCheckInPhoto] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number }>({
-    lat: activeCustomer.lat + 0.0002,
-    lng: activeCustomer.lng + 0.0001,
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number }>(() => {
+    if (activeCustomer.hasGps) {
+      return {
+        lat: activeCustomer.lat + 0.0002,
+        lng: activeCustomer.lng + 0.0001,
+      };
+    }
+    return { lat: DEFAULT_MAP_CENTER[0], lng: DEFAULT_MAP_CENTER[1] };
   });
 
-  // MCP Route by Day of Week state
   const getTodayKey = (): 'T2' | 'T3' | 'T4' | 'T5' | 'T6' | 'T7' => {
     const day = new Date().getDay();
     if (day === 2) return 'T3';
@@ -73,12 +94,15 @@ export default function PwaRouteMap({
   const activeBeatDay = selectedDay === 'today' ? todayKey : selectedDay;
   const filteredBeatCustomers = useMemo(() => {
     if (selectedDay === 'all') return customers;
-    return customers.filter((c: Customer) => (c.visitDay || 'T2') === activeBeatDay);
+    return customers.filter((c: Customer) => c.visitDay === activeBeatDay);
   }, [customers, selectedDay, activeBeatDay]);
 
-  const beatTotal = filteredBeatCustomers.length || 1;
-  const beatVisited = filteredBeatCustomers.filter((c: Customer) => checkedInCustomerIds.has(c.id)).length;
-  const beatProgress = Math.round((beatVisited / beatTotal) * 100);
+  const beatTotal = filteredBeatCustomers.length;
+  const beatVisited = filteredBeatCustomers.filter((c: Customer) =>
+    checkedInCustomerIds.has(c.id),
+  ).length;
+  const beatProgress =
+    beatTotal === 0 ? 0 : Math.round((beatVisited / beatTotal) * 100);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
@@ -87,28 +111,34 @@ export default function PwaRouteMap({
   const userAccuracyCircleRef = useRef<L.Circle | null>(null);
 
   const isCheckedIn = checkedInCustomerIds.has(activeCustomer.id);
-  const isInRange = distanceMeters <= 50;
+  const needsGpsPin = !activeCustomer.hasGps;
+  const isInRange = needsGpsPin
+    ? hasGpsFix
+    : hasGpsFix && distanceMeters <= CHECK_IN_MAX_DISTANCE_M;
 
-  // Initialize or update Leaflet map
+  const mapCenterLat = activeCustomer.hasGps
+    ? activeCustomer.lat
+    : DEFAULT_MAP_CENTER[0];
+  const mapCenterLng = activeCustomer.hasGps
+    ? activeCustomer.lng
+    : DEFAULT_MAP_CENTER[1];
+
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
     if (!leafletMapRef.current) {
-      // Create map instance
       const map = L.map(mapContainerRef.current, {
-        center: [activeCustomer.lat, activeCustomer.lng],
+        center: [mapCenterLat, mapCenterLng],
         zoom: 16,
         zoomControl: false,
         attributionControl: false,
       });
 
-      // CartoDB Positron clean light tiles
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         maxZoom: 19,
         subdomains: 'abcd',
       }).addTo(map);
 
-      // Markers layer
       const markerGroup = L.layerGroup().addTo(map);
       markersRef.current = markerGroup;
 
@@ -118,23 +148,24 @@ export default function PwaRouteMap({
     const map = leafletMapRef.current;
     if (!map) return;
 
-    // Pan to active customer
-    map.flyTo([activeCustomer.lat, activeCustomer.lng], 16, { duration: 0.8 });
+    map.flyTo([mapCenterLat, mapCenterLng], 16, { duration: 0.8 });
 
-    // Render customer pins
     if (markersRef.current) {
       markersRef.current.clearLayers();
 
       customers.forEach((cust) => {
+        if (!cust.hasGps) return;
+
         const isCustCheckedIn = checkedInCustomerIds.has(cust.id);
         const isSelected = cust.id === activeCustomer.id;
-        const isPriority = cust.rfmSegment === 'At Risk' || (cust.lastPurchaseDaysAgo ?? 0) >= 20;
+        const isPriority =
+          cust.rfmSegment === 'At Risk' || (cust.lastPurchaseDaysAgo ?? 0) >= 20;
 
-        let pinBg = '#64748B'; // Slate (scheduled)
+        let pinBg = '#64748B';
         if (isCustCheckedIn) {
-          pinBg = '#059669'; // Emerald
+          pinBg = '#059669';
         } else if (isPriority) {
-          pinBg = '#D97706'; // Amber glow
+          pinBg = '#D97706';
         }
 
         const iconHtml = `
@@ -161,7 +192,6 @@ export default function PwaRouteMap({
       });
     }
 
-    // User Blue Beacon
     if (userMarkerRef.current) {
       userMarkerRef.current.setLatLng([userLocation.lat, userLocation.lng]);
     } else {
@@ -175,22 +205,34 @@ export default function PwaRouteMap({
       }).addTo(map);
     }
 
-    // Accuracy Circle
+    const accuracyRadius = Math.max(
+      15,
+      Math.min(Number.isFinite(distanceMeters) ? distanceMeters : 15, CHECK_IN_MAX_DISTANCE_M),
+    );
+
     if (userAccuracyCircleRef.current) {
       userAccuracyCircleRef.current.setLatLng([userLocation.lat, userLocation.lng]);
-      userAccuracyCircleRef.current.setRadius(Math.max(15, distanceMeters));
+      userAccuracyCircleRef.current.setRadius(accuracyRadius);
     } else {
       userAccuracyCircleRef.current = L.circle([userLocation.lat, userLocation.lng], {
-        radius: Math.max(15, distanceMeters),
+        radius: accuracyRadius,
         color: '#3B82F6',
         weight: 1,
         fillColor: '#3B82F6',
         fillOpacity: 0.15,
       }).addTo(map);
     }
-  }, [activeCustomer, customers, checkedInCustomerIds, userLocation, distanceMeters, onSelectCustomer]);
+  }, [
+    activeCustomer,
+    customers,
+    checkedInCustomerIds,
+    userLocation,
+    distanceMeters,
+    onSelectCustomer,
+    mapCenterLat,
+    mapCenterLng,
+  ]);
 
-  // Invalidate map size on mount and container changes
   useEffect(() => {
     const timer = setTimeout(() => {
       leafletMapRef.current?.invalidateSize();
@@ -198,8 +240,7 @@ export default function PwaRouteMap({
     return () => clearTimeout(timer);
   }, []);
 
-  // Request real device GPS
-  const handleRequestRealGps = () => {
+  const handleRequestRealGps = useCallback(() => {
     if (!navigator.geolocation) {
       setGpsError('Trình duyệt không hỗ trợ Geolocation');
       return;
@@ -213,31 +254,64 @@ export default function PwaRouteMap({
         setIsLocating(false);
         const { latitude, longitude } = position.coords;
         setUserLocation({ lat: latitude, lng: longitude });
-
-        // Calculate real distance to active customer
-        const dist = calculateHaversineDistance(
-          latitude,
-          longitude,
-          activeCustomer.lat,
-          activeCustomer.lng
-        );
-        setDistanceMeters(dist);
+        setHasGpsFix(true);
         setIsSimulatingGps(false);
+
+        if (activeCustomer.hasGps) {
+          const dist = calculateHaversineDistance(
+            latitude,
+            longitude,
+            activeCustomer.lat,
+            activeCustomer.lng,
+          );
+          setDistanceMeters(Math.round(dist));
+        } else {
+          setDistanceMeters(0);
+        }
       },
       (err) => {
         setIsLocating(false);
-        setGpsError('Không lấy được GPS (Dùng chế độ mô phỏng thanh trượt)');
+        setGpsError(
+          ALLOW_GPS_SIM
+            ? 'Không lấy được GPS (Dùng chế độ mô phỏng thanh trượt)'
+            : 'Không lấy được GPS. Bật định vị và thử lại.',
+        );
         console.warn('GPS error:', err);
       },
       {
         enableHighAccuracy: true,
         timeout: 10000,
         maximumAge: 0,
-      }
+      },
     );
-  };
+  }, [activeCustomer]);
 
-  // Handle Camera Photo Selection for Check-In
+  useEffect(() => {
+    if (!ALLOW_GPS_SIM) {
+      handleRequestRealGps();
+      return;
+    }
+    if (activeCustomer.hasGps) {
+      setDistanceMeters(28);
+      setUserLocation({
+        lat: activeCustomer.lat + 0.0002,
+        lng: activeCustomer.lng + 0.0001,
+      });
+      setHasGpsFix(true);
+      setIsSimulatingGps(true);
+    } else {
+      setDistanceMeters(0);
+      setHasGpsFix(true);
+      setIsSimulatingGps(true);
+    }
+  }, [
+    activeCustomer.id,
+    activeCustomer.hasGps,
+    activeCustomer.lat,
+    activeCustomer.lng,
+    handleRequestRealGps,
+  ]);
+
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -250,35 +324,47 @@ export default function PwaRouteMap({
     reader.readAsDataURL(file);
   };
 
-  // Perform Tactile Check-In
-  const handleCheckIn = () => {
-    if (!isInRange) return;
+  const handleCheckIn = async () => {
+    if (!isInRange || isCheckingIn) return;
+    if (!ALLOW_GPS_SIM && isSimulatingGps) return;
 
-    // Haptic feedback
+    setIsCheckingIn(true);
     if (typeof window !== 'undefined' && 'vibrate' in navigator) {
       try {
         navigator.vibrate([100, 50, 100]);
       } catch {}
     }
-    soundFX.playSuccess();
 
-    const now = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-    onCheckInSuccess(activeCustomer, {
-      timestamp: now,
-      lat: userLocation.lat,
-      lng: userLocation.lng,
-      accuracyMeters: distanceMeters,
-      photoBase64: checkInPhoto || undefined,
+    const now = new Date().toLocaleTimeString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
     });
+    try {
+      await onCheckInSuccess(activeCustomer, {
+        timestamp: now,
+        lat: userLocation.lat,
+        lng: userLocation.lng,
+        accuracyMeters: needsGpsPin ? 0 : distanceMeters,
+        photoBase64: checkInPhoto || undefined,
+      });
+      soundFX.playSuccess();
+    } finally {
+      setIsCheckingIn(false);
+    }
   };
 
-  // Deep link to maps
   const openExternalNavigation = (cust: Customer) => {
+    if (!cust.hasGps) {
+      setGpsError('Khách hàng chưa có tọa độ GPS để chỉ đường.');
+      return;
+    }
     const url = `https://www.google.com/maps/dir/?api=1&destination=${cust.lat},${cust.lng}`;
     window.open(url, '_blank');
   };
 
-  const debtUsagePercent = Math.round((activeCustomer.currentDebt / (activeCustomer.creditLimit || 1)) * 100);
+  const debtUsagePercent = Math.round(
+    (activeCustomer.currentDebt / (activeCustomer.creditLimit || 1)) * 100,
+  );
 
   return (
     <div id="pwa-route-module" className="w-full flex flex-col space-y-6">
@@ -315,7 +401,9 @@ export default function PwaRouteMap({
             {/* Top-left Radar Status Badge */}
             <div className="absolute top-3 left-3 z-10 bg-slate-900/90 backdrop-blur-md text-white px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 shadow-md border border-slate-700">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-ping" />
-              <span className="font-mono text-xs sm:text-sm tracking-wide">GPS Geofence Radar 50m</span>
+              <span className="font-mono text-xs sm:text-sm tracking-wide">
+                GPS Geofence Radar {CHECK_IN_MAX_DISTANCE_M}m
+              </span>
             </div>
 
             {gpsError && (
@@ -338,7 +426,7 @@ export default function PwaRouteMap({
                       Lịch Tuyến Bán Hàng MCP ({filteredBeatCustomers.length} điểm)
                     </h3>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      Tự động phân bổ tuyến ghé thăm định kỳ Thứ 2 - Thứ 7
+                      Gán Ngày ghé (T2–T7) trên trang Khách hàng để hiện trong tuyến
                     </div>
                   </div>
                 </div>
@@ -401,7 +489,17 @@ export default function PwaRouteMap({
 
             {/* Multi-Column Grid of Route Stops */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 pt-1">
-              {filteredBeatCustomers.map((c: Customer) => {
+              {filteredBeatCustomers.length === 0 ? (
+                <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
+                  <p className="text-sm font-bold text-slate-700">
+                    Chưa có khách trong tuyến ngày này
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Gán Ngày ghé trên Khách hàng để điểm bán xuất hiện ở đây.
+                  </p>
+                </div>
+              ) : (
+                filteredBeatCustomers.map((c: Customer) => {
                 const isSelected = c.id === activeCustomer.id;
                 const isCustCheckedIn = checkedInCustomerIds.has(c.id);
 
@@ -464,7 +562,8 @@ export default function PwaRouteMap({
                     </div>
                   </button>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
         </div>
@@ -512,14 +611,22 @@ export default function PwaRouteMap({
             <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs uppercase font-extrabold text-slate-400 tracking-wider">
-                  Khoảng cách thực tế
+                  {needsGpsPin ? 'Trạng thái GPS cửa hàng' : 'Khoảng cách thực tế'}
                 </div>
                 <div
                   className={`text-3xl sm:text-4xl lg:text-5xl font-black font-mono mt-1 tracking-tight ${
-                    isInRange ? 'text-emerald-600' : 'text-rose-600'
+                    needsGpsPin
+                      ? 'text-amber-600'
+                      : isInRange
+                        ? 'text-emerald-600'
+                        : 'text-rose-600'
                   }`}
                 >
-                  {distanceMeters}m
+                  {needsGpsPin
+                    ? 'Chưa có'
+                    : hasGpsFix
+                      ? `${distanceMeters}m`
+                      : '—'}
                 </div>
               </div>
 
@@ -529,32 +636,40 @@ export default function PwaRouteMap({
                 </div>
                 <span
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs sm:text-sm font-black mt-1 ${
-                    isInRange
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-rose-100 text-rose-800'
+                    needsGpsPin
+                      ? 'bg-amber-100 text-amber-900'
+                      : isInRange
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-rose-100 text-rose-800'
                   }`}
                 >
-                  {isInRange ? (
+                  {needsGpsPin ? (
+                    <>
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Cắm GPS lần đầu</span>
+                    </>
+                  ) : isInRange ? (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Hợp lệ (&le; 50m)</span>
+                      <span>Hợp lệ (&le; {CHECK_IN_MAX_DISTANCE_M}m)</span>
                     </>
                   ) : (
                     <>
                       <AlertCircle className="w-4 h-4" />
-                      <span>Quá xa (&gt; 50m)</span>
+                      <span>Quá xa (&gt; {CHECK_IN_MAX_DISTANCE_M}m)</span>
                     </>
                   )}
                 </span>
               </div>
             </div>
 
-            {/* GPS Simulation Slider (Essential for Instant Testing) */}
+            {/* GPS Simulation Slider — development only */}
+            {ALLOW_GPS_SIM && (
             <div className="pt-2 border-t border-slate-100 space-y-2">
               <div className="flex items-center justify-between text-xs sm:text-sm text-slate-700 font-bold">
                 <span className="flex items-center gap-1.5">
                   <Sliders className="w-4 h-4 text-amber-500" />
-                  <span>Mô phỏng khoảng cách GPS:</span>
+                  <span>Mô phỏng khoảng cách GPS (DEV):</span>
                 </span>
                 <span className="font-mono font-black text-slate-900 bg-amber-100 text-amber-950 px-2.5 py-0.5 rounded-md text-sm">
                   {distanceMeters}m
@@ -563,18 +678,25 @@ export default function PwaRouteMap({
               <input
                 type="range"
                 min="5"
-                max="200"
+                max="400"
                 step="5"
-                value={distanceMeters}
-                onChange={(e) => setDistanceMeters(Number(e.target.value))}
+                value={Math.min(400, Math.max(5, distanceMeters || 5))}
+                onChange={(e) => {
+                  setDistanceMeters(Number(e.target.value));
+                  setIsSimulatingGps(true);
+                  setHasGpsFix(true);
+                }}
                 className="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
               />
               <div className="flex justify-between text-xs text-slate-500 font-mono font-medium">
-                <span className="text-emerald-700 font-bold">5m (Trước cửa)</span>
-                <span className="text-amber-700 font-bold">50m (Ngưỡng Geofence)</span>
-                <span>200m (Cách xa)</span>
+                <span className="text-emerald-700 font-bold">5m</span>
+                <span className="text-amber-700 font-bold">
+                  {CHECK_IN_MAX_DISTANCE_M}m (Ngưỡng)
+                </span>
+                <span>400m</span>
               </div>
             </div>
+            )}
 
             {/* Hidden Mobile Camera Input */}
             <input
@@ -691,24 +813,40 @@ export default function PwaRouteMap({
                   <button
                     id="pwa-checkin-action-btn"
                     onClick={handleCheckIn}
-                    className="w-full h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 active:scale-[0.98] text-white font-black text-base sm:text-lg flex flex-col items-center justify-center shadow-lg shadow-emerald-600/30 transition-all cursor-pointer animate-pulse"
+                    disabled={isCheckingIn}
+                    className="w-full h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 active:scale-[0.98] text-white font-black text-base sm:text-lg flex flex-col items-center justify-center shadow-lg shadow-emerald-600/30 transition-all cursor-pointer animate-pulse disabled:opacity-60"
                   >
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-5 h-5 text-white" />
-                      <span>CHECK-IN ĐIỂM BÁN (CÁCH {distanceMeters}M)</span>
+                      <span>
+                        {isCheckingIn
+                          ? 'ĐANG LƯU…'
+                          : needsGpsPin
+                            ? 'CẮM GPS & CHECK-IN'
+                            : `CHECK-IN ĐIỂM BÁN (CÁCH ${distanceMeters}M)`}
+                      </span>
                     </div>
                     <span className="text-xs text-emerald-100 font-normal tracking-wide">
-                      {checkInPhoto ? "Đã đính kèm ảnh biển hiệu" : "Đã vào đúng bán kính Geofence"} &bull; Nhấn để mở khóa lên đơn
+                      {needsGpsPin
+                        ? 'Lưu tọa độ cửa hàng từ GPS hiện tại'
+                        : checkInPhoto
+                          ? 'Đã đính kèm ảnh biển hiệu'
+                          : 'Đã vào đúng bán kính Geofence'}{' '}
+                      &bull; Nhấn để mở khóa lên đơn
                     </span>
                   </button>
                 </div>
               ) : (
                 <div className="w-full p-4 sm:p-5 rounded-2xl bg-slate-100 text-slate-500 flex flex-col items-center justify-center text-center cursor-not-allowed border border-slate-200">
                   <div className="font-extrabold text-sm sm:text-base text-slate-700">
-                    Bạn đang ở cách điểm bán {distanceMeters}m
+                    {!hasGpsFix
+                      ? 'Đang chờ GPS thật…'
+                      : `Bạn đang ở cách điểm bán ${distanceMeters}m`}
                   </div>
                   <div className="text-xs sm:text-sm text-slate-500 mt-1">
-                    Kéo thanh trượt hoặc di chuyển lại gần &le; 50m để mở khóa check-in
+                    {ALLOW_GPS_SIM
+                      ? `Kéo thanh mô phỏng hoặc di chuyển lại gần ≤ ${CHECK_IN_MAX_DISTANCE_M}m`
+                      : `Bấm biểu tượng định vị và đứng trong bán kính ≤ ${CHECK_IN_MAX_DISTANCE_M}m`}
                   </div>
                 </div>
               )}

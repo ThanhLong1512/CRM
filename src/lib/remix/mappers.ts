@@ -124,9 +124,7 @@ export function mapCustomerDto(
   rfm?: RfmCustomerDto,
 ): Customer {
   const hasGps = dto.lat != null && dto.lng != null;
-  const DAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7'] as const;
-  const dayIndex = dto.id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % DAYS.length;
-  const visitDay = DAYS[dayIndex];
+  const visitDay = dto.visitDay ?? undefined;
   const routeNames = {
     T2: "Tuyến T2: QL1A - Hóc Môn - Q12",
     T3: "Tuyến T3: KCN Tân Bình - Vĩnh Lộc",
@@ -134,7 +132,7 @@ export function mapCustomerDto(
     T5: "Tuyến T5: Củ Chi - Hóc Môn",
     T6: "Tuyến T6: Cảng Cát Lái - TP. Thủ Đức",
     T7: "Tuyến T7: Chăm sóc Đại lý VIP",
-  };
+  } as const;
 
   return {
     id: dto.id,
@@ -146,7 +144,7 @@ export function mapCustomerDto(
     lat: dto.lat ?? 0,
     lng: dto.lng ?? 0,
     hasGps,
-    route: routeNames[visitDay],
+    route: visitDay ? routeNames[visitDay] : "Chưa gán ngày ghé",
     visitDay,
     visitFrequency: "WEEKLY",
     creditLimit: dto.creditLimit,

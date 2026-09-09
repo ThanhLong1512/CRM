@@ -1,7 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, type CustomerType } from "@prisma/client";
+import {
+  Prisma,
+  type CustomerType,
+  type VisitDayOfWeek,
+} from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export type CustomerActionResult = {
@@ -19,9 +23,11 @@ type ParsedCustomerInput = {
   creditTermDays: number;
   lat: number | null;
   lng: number | null;
+  visitDay: VisitDayOfWeek | null;
 };
 
 const CUSTOMER_TYPES: CustomerType[] = ["GARAGE", "FLEET"];
+const VISIT_DAYS: VisitDayOfWeek[] = ["T2", "T3", "T4", "T5", "T6", "T7"];
 
 function parseOptionalCoord(
   raw: string,
@@ -48,6 +54,7 @@ function parseCustomerFormData(
   const creditTermDaysRaw = String(formData.get("creditTermDays") ?? "").trim();
   const latRaw = String(formData.get("lat") ?? "").trim();
   const lngRaw = String(formData.get("lng") ?? "").trim();
+  const visitDayRaw = String(formData.get("visitDay") ?? "").trim().toUpperCase();
 
   if (!name) {
     return { error: "Vui lòng nhập tên khách hàng." };
@@ -77,6 +84,14 @@ function parseCustomerFormData(
     return lngParsed;
   }
 
+  let visitDay: VisitDayOfWeek | null = null;
+  if (visitDayRaw) {
+    if (!VISIT_DAYS.includes(visitDayRaw as VisitDayOfWeek)) {
+      return { error: "Ngày ghé phải là T2–T7." };
+    }
+    visitDay = visitDayRaw as VisitDayOfWeek;
+  }
+
   return {
     data: {
       name,
@@ -87,6 +102,7 @@ function parseCustomerFormData(
       creditTermDays,
       lat: latParsed.value,
       lng: lngParsed.value,
+      visitDay,
     },
   };
 }

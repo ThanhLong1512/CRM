@@ -221,6 +221,27 @@ export function CustomerActionMenu({ customer }: CustomerActionMenuProps) {
               </div>
             </div>
 
+            <div className="grid gap-2">
+              <Label htmlFor={`edit-visit-day-${customer.id}`}>
+                Ngày ghé tuyến MCP
+              </Label>
+              <select
+                id={`edit-visit-day-${customer.id}`}
+                name="visitDay"
+                defaultValue={customer.visitDay ?? ""}
+                disabled={pending}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              >
+                <option value="">Chưa gán</option>
+                <option value="T2">T2 — Thứ 2</option>
+                <option value="T3">T3 — Thứ 3</option>
+                <option value="T4">T4 — Thứ 4</option>
+                <option value="T5">T5 — Thứ 5</option>
+                <option value="T6">T6 — Thứ 6</option>
+                <option value="T7">T7 — Thứ 7</option>
+              </select>
+            </div>
+
             <DialogFooter className="mx-0 mb-0 rounded-none border-0 bg-transparent p-0">
               <Button
                 type="button"

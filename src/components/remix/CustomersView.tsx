@@ -51,6 +51,7 @@ export type CustomerFormInput = {
   creditTermDays?: number;
   lat: string;
   lng: string;
+  visitDay: "" | "T2" | "T3" | "T4" | "T5" | "T6" | "T7";
 };
 
 interface CustomersViewProps {
@@ -82,6 +83,7 @@ function emptyForm(): CustomerFormInput {
     creditTermDays: 30,
     lat: "",
     lng: "",
+    visitDay: "",
   };
 }
 
@@ -206,6 +208,7 @@ export default function CustomersView({
       creditTermDays: c.creditTermDays ?? 30,
       lat: c.hasGps && c.lat ? String(c.lat) : "",
       lng: c.hasGps && c.lng ? String(c.lng) : "",
+      visitDay: c.visitDay ?? "",
     });
     setFormOpen(true);
   };
@@ -834,6 +837,29 @@ export default function CustomersView({
                     className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">
+                  Ngày ghé tuyến MCP
+                </label>
+                <select
+                  value={form.visitDay}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      visitDay: e.target.value as CustomerFormInput["visitDay"],
+                    })
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-900"
+                >
+                  <option value="">Chưa gán</option>
+                  <option value="T2">T2 — Thứ 2</option>
+                  <option value="T3">T3 — Thứ 3</option>
+                  <option value="T4">T4 — Thứ 4</option>
+                  <option value="T5">T5 — Thứ 5</option>
+                  <option value="T6">T6 — Thứ 6</option>
+                  <option value="T7">T7 — Thứ 7</option>
+                </select>
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
