@@ -30,6 +30,7 @@ export function CreateCustomerButton() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"GARAGE" | "FLEET">("GARAGE");
+  const [selectedVisitDays, setSelectedVisitDays] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
 
   function handleSubmit(formData: FormData) {
@@ -53,7 +54,10 @@ export function CreateCustomerButton() {
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) setType("GARAGE");
+        if (!next) {
+          setType("GARAGE");
+          setSelectedVisitDays([]);
+        }
       }}
     >
       <DialogTrigger
@@ -162,22 +166,38 @@ export function CreateCustomerButton() {
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="customer-visit-day">Ngày ghé tuyến MCP</Label>
-            <select
-              id="customer-visit-day"
-              name="visitDay"
-              defaultValue=""
-              disabled={pending}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-            >
-              <option value="">Chưa gán</option>
-              <option value="T2">T2 — Thứ 2</option>
-              <option value="T3">T3 — Thứ 3</option>
-              <option value="T4">T4 — Thứ 4</option>
-              <option value="T5">T5 — Thứ 5</option>
-              <option value="T6">T6 — Thứ 6</option>
-              <option value="T7">T7 — Thứ 7</option>
-            </select>
+            <div className="flex items-center justify-between">
+              <Label>Lịch ghé tuyến MCP (chọn nhiều ngày)</Label>
+              <span className="text-xs text-muted-foreground font-mono">
+                {selectedVisitDays.length > 0 ? selectedVisitDays.join(", ") : "Chưa gán"}
+              </span>
+            </div>
+            <input type="hidden" name="visitDays" value={selectedVisitDays.join(",")} />
+            <input type="hidden" name="visitDay" value={selectedVisitDays[0] || ""} />
+            <div className="grid grid-cols-6 gap-1.5">
+              {(["T2", "T3", "T4", "T5", "T6", "T7"] as const).map((day) => {
+                const isSelected = selectedVisitDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      setSelectedVisitDays((prev) =>
+                        isSelected ? prev.filter((d) => d !== day) : [...prev, day]
+                      );
+                    }}
+                    className={`py-2 px-1 rounded-lg text-center text-xs font-bold transition-colors cursor-pointer ${
+                      isSelected
+                        ? "bg-amber-500 text-slate-950 shadow-xs ring-1 ring-amber-400 font-black"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <DialogFooter className="mx-0 mb-0 rounded-none border-0 bg-transparent p-0">

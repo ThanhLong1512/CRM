@@ -157,6 +157,7 @@ model Customer {
   lat                      Decimal?          @db.Decimal(10, 7)
   lng                      Decimal?          @db.Decimal(10, 7)
   visitDay                 VisitDayOfWeek?
+  visitDays                String?
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
   orders                   Order[]

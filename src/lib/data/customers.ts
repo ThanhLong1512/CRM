@@ -139,6 +139,11 @@ export async function listCustomers(): Promise<CustomerDto[]> {
       lat: customer.lat != null ? Number(customer.lat) : null,
       lng: customer.lng != null ? Number(customer.lng) : null,
       visitDay: customer.visitDay,
+      visitDays: customer.visitDays
+        ? (customer.visitDays.split(",").filter(Boolean) as ("T2" | "T3" | "T4" | "T5" | "T6" | "T7")[])
+        : customer.visitDay
+          ? [customer.visitDay]
+          : [],
       createdAt: customer.createdAt.toISOString(),
       updatedAt: customer.updatedAt.toISOString(),
     };

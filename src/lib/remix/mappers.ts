@@ -14,6 +14,7 @@ import type {
   OrderStatus,
   PackageType,
   Product,
+  VisitDayOfWeek,
 } from "@/types";
 import type { OrderStatus as PrismaOrderStatus } from "@prisma/client";
 
@@ -146,6 +147,11 @@ export function mapCustomerDto(
     hasGps,
     route: visitDay ? routeNames[visitDay] : "Chưa gán ngày ghé",
     visitDay,
+    visitDays: dto.visitDays && dto.visitDays.length > 0
+      ? (dto.visitDays as VisitDayOfWeek[])
+      : visitDay
+        ? [visitDay]
+        : [],
     visitFrequency: "WEEKLY",
     creditLimit: dto.creditLimit,
     creditTermDays: dto.creditTermDays ?? 30,

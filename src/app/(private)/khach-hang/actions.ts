@@ -24,6 +24,7 @@ type ParsedCustomerInput = {
   lat: number | null;
   lng: number | null;
   visitDay: VisitDayOfWeek | null;
+  visitDays?: string | null;
 };
 
 const CUSTOMER_TYPES: CustomerType[] = ["GARAGE", "FLEET"];
@@ -55,6 +56,7 @@ function parseCustomerFormData(
   const latRaw = String(formData.get("lat") ?? "").trim();
   const lngRaw = String(formData.get("lng") ?? "").trim();
   const visitDayRaw = String(formData.get("visitDay") ?? "").trim().toUpperCase();
+  const visitDaysRaw = String(formData.get("visitDays") ?? "").trim();
 
   if (!name) {
     return { error: "Vui lòng nhập tên khách hàng." };
@@ -85,11 +87,20 @@ function parseCustomerFormData(
   }
 
   let visitDay: VisitDayOfWeek | null = null;
-  if (visitDayRaw) {
-    if (!VISIT_DAYS.includes(visitDayRaw as VisitDayOfWeek)) {
-      return { error: "Ngày ghé phải là T2–T7." };
+  let visitDays: string | null = null;
+
+  if (visitDaysRaw) {
+    const valid = visitDaysRaw
+      .split(",")
+      .map((d) => d.trim().toUpperCase())
+      .filter((d) => VISIT_DAYS.includes(d as VisitDayOfWeek));
+    if (valid.length > 0) {
+      visitDays = valid.join(",");
+      visitDay = valid[0] as VisitDayOfWeek;
     }
+  } else if (visitDayRaw && VISIT_DAYS.includes(visitDayRaw as VisitDayOfWeek)) {
     visitDay = visitDayRaw as VisitDayOfWeek;
+    visitDays = visitDay;
   }
 
   return {
@@ -103,6 +114,7 @@ function parseCustomerFormData(
       lat: latParsed.value,
       lng: lngParsed.value,
       visitDay,
+      visitDays,
     },
   };
 }
@@ -186,3 +198,33 @@ export async function deleteCustomer(
   revalidatePath("/khach-hang");
   return ok("Đã xóa khách hàng thành công.");
 }
+
+export async function updateCustomerVisitDays(
+  customerId: string,
+  visitDays: ("T2" | "T3" | "T4" | "T5" | "T6" | "T7")[],
+): Promise<CustomerActionResult> {
+  if (!customerId) {
+    return fail("Thiếu mã khách hàng.");
+  }
+
+  try {
+    const validDays = visitDays.filter((d) => VISIT_DAYS.includes(d as VisitDayOfWeek));
+    const visitDaysStr = validDays.join(",");
+    const primaryDay = (validDays[0] as VisitDayOfWeek) || null;
+
+    await prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        visitDays: visitDaysStr || null,
+        visitDay: primaryDay,
+      },
+    });
+
+    revalidatePath("/sales");
+    revalidatePath("/khach-hang");
+    return ok("Đã cập nhật lịch ngày ghé thành công.");
+  } catch (error) {
+    return fail(mapPrismaError(error));
+  }
+}
+

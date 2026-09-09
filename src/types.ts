@@ -77,6 +77,7 @@ export interface Customer {
   hasGps: boolean;
   route: string;
   visitDay?: VisitDayOfWeek;
+  visitDays?: VisitDayOfWeek[];
   visitFrequency?: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
   creditLimit: number;
   creditTermDays?: number; // default 30 days
