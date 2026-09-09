@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, useEffect, type FormEvent } from "react";
 import { Customer, CustomerType } from "../types";
 import { formatVND } from "@/lib/remix/mappers";
 import {
@@ -39,6 +39,8 @@ import type { CreditOverrideRequest } from "../types";
 import type { AuthUserProfile } from "@/components/auth/authData";
 import { soundFX } from "@/components/utils/audio";
 import { ActionMenu, PageActionMenu, type ActionMenuItem } from "@/components/common/ActionMenu";
+import { Pagination } from "@/components/common/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 
 export type CustomerFormInput = {
   name: string;
@@ -156,6 +158,23 @@ export default function CustomersView({
       return matchSearch && matchType;
     });
   }, [customers, searchTerm, selectedType]);
+
+  const {
+    currentPage,
+    setCurrentPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+    paginatedItems: paginatedCustomers,
+    resetPage,
+  } = usePagination(filteredCustomers, { initialPageSize: 10 });
+
+  useEffect(() => {
+    resetPage();
+  }, [searchTerm, selectedType, resetPage]);
 
   const totalCreditLimit = customers.reduce((sum, c) => sum + c.creditLimit, 0);
   const totalCurrentDebt = customers.reduce((sum, c) => sum + c.currentDebt, 0);
@@ -422,7 +441,7 @@ export default function CustomersView({
             Không có khách hàng phù hợp. Bấm “Thêm khách hàng” để tạo mới.
           </div>
         ) : (
-          filteredCustomers.map((c) => {
+          paginatedCustomers.map((c) => {
             const typeMeta = getTypeMeta(c.type);
             const Icon = typeMeta.icon;
             const ratio = Math.round(
@@ -669,6 +688,18 @@ export default function CustomersView({
           })
         )}
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        startIndex={startIndex}
+        endIndex={endIndex}
+        pageSize={pageSize}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+        itemLabel="khách hàng"
+      />
 
       {formOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">

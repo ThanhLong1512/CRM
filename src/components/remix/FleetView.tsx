@@ -17,6 +17,9 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ActionMenu } from '@/components/common/ActionMenu';
+import { usePagination } from '../../hooks/usePagination';
+import Pagination from '../common/Pagination';
+
 
 interface FleetViewProps {
   vehicles: FleetVehicle[];
@@ -63,6 +66,22 @@ export default function FleetView({
   const greenVehicles = vehicles.filter(
     (v) => v.nextOilChangeKm - v.currentKm > 500
   );
+
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    paginatedItems: paginatedVehicles,
+    startIndex,
+    endIndex,
+    totalItems,
+    goToPage,
+    setPageSize,
+  } = usePagination({
+    items: vehicles,
+    initialPageSize: 6,
+    pageSizeOptions: [6, 12, 24],
+  });
 
   const handleStartEdit = (v: FleetVehicle) => {
     setEditingVehicleId(v.id);
@@ -228,7 +247,7 @@ export default function FleetView({
 
       {/* 3. Fleet Vehicles Detailed Cards Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {vehicles.map((v) => {
+        {paginatedVehicles.map((v) => {
           const isOverdue = v.currentKm > v.nextOilChangeKm;
           const remainingKm = v.nextOilChangeKm - v.currentKm;
           const isWarning = remainingKm <= 500 && !isOverdue;
@@ -410,6 +429,20 @@ export default function FleetView({
             </div>
           );
         })}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          onPageChange={goToPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[6, 12, 24]}
+        />
       </div>
 
       {/* Inline Km Update Modal */}

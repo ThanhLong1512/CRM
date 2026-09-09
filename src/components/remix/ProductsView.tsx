@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, FormEvent } from 'react';
+import { useState, useMemo, useEffect, FormEvent } from 'react';
 import { Product, PackageType } from '../types';
 import { formatVND } from '@/lib/remix/mappers';
 import {
@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import LubeGuideModal from './LubeGuideModal';
 import { ActionMenu, PageActionMenu } from '@/components/common/ActionMenu';
+import { Pagination } from '@/components/common/Pagination';
+import { usePagination } from '@/hooks/usePagination';
 import { getContainerLiters } from '@/lib/unitConverter';
 
 interface ProductsViewProps {
@@ -111,6 +113,23 @@ export default function ProductsView({
       return matchSearch && matchCategory && matchPackage;
     });
   }, [products, searchTerm, selectedCategory, selectedPackage]);
+
+  const {
+    currentPage,
+    setCurrentPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+    paginatedItems: paginatedProducts,
+    resetPage,
+  } = usePagination(filteredProducts, { initialPageSize: 10 });
+
+  useEffect(() => {
+    resetPage();
+  }, [searchTerm, selectedCategory, selectedPackage, resetPage]);
 
   const handleOpenDrawer = (productToEdit?: Product) => {
     if (productToEdit) {
@@ -431,7 +450,7 @@ export default function ProductsView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredProducts.map((p) => {
+              {paginatedProducts.map((p) => {
                 const pkgBadge = getPackageBadge(p.packageType);
                 const isLowStock = p.stock <= p.minSafeStock;
                 const stockPercent = Math.min(
@@ -625,12 +644,12 @@ export default function ProductsView({
 
       {/* 4B. Mobile Card-based Product List (shows essential data: Name, SKU, Package, Price, Stock & ActionMenu) */}
       <div className="space-y-3 md:hidden">
-        {filteredProducts.length === 0 ? (
+        {paginatedProducts.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-8 text-center text-xs text-slate-500">
             Không tìm thấy sản phẩm phù hợp.
           </div>
         ) : (
-          filteredProducts.map((p) => {
+          paginatedProducts.map((p) => {
             const pkgBadge = getPackageBadge(p.packageType);
             const isLowStock = p.stock <= p.minSafeStock;
             return (
@@ -690,12 +709,15 @@ export default function ProductsView({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                    {p.viscosity}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded border font-semibold text-[10px] ${pkgBadge.bg}`}>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-bold ${pkgBadge.bg}`}>
+                    <span className={`size-1.5 rounded-full ${pkgBadge.dot}`} />
                     {p.packageType}
                   </span>
+                  {p.viscosity && (
+                    <span className="px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 font-mono text-[10px] font-medium text-slate-600">
+                      {p.viscosity}
+                    </span>
+                  )}
                   {p.drumReturnable && (
                     <span className="px-1.5 py-0.5 rounded border border-cyan-200 bg-cyan-50 text-[10px] font-bold text-cyan-800">
                       Vỏ cọc
@@ -733,6 +755,19 @@ export default function ProductsView({
           })
         )}
       </div>
+
+      {/* Pagination Bar */}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        startIndex={startIndex}
+        endIndex={endIndex}
+        pageSize={pageSize}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+        itemLabel="sản phẩm"
+      />
 
       {/* 5. Sliding Drawer for Add/Edit Product */}
       {isDrawerOpen && (

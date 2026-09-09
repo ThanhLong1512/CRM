@@ -19,6 +19,9 @@ import {
   ShieldCheck,
   Boxes,
 } from 'lucide-react';
+import { usePagination } from '../../hooks/usePagination';
+import Pagination from '../common/Pagination';
+
 
 interface DrumsViewProps {
   customers: Customer[];
@@ -55,6 +58,22 @@ export default function DrumsView({
   useEffect(() => {
     setLocalTransactions(initialDrumTransactions);
   }, [initialDrumTransactions]);
+
+  const {
+    currentPage: txCurrentPage,
+    pageSize: txPageSize,
+    totalPages: txTotalPages,
+    paginatedItems: paginatedTransactions,
+    startIndex: txStartIndex,
+    endIndex: txEndIndex,
+    totalItems: txTotalItems,
+    goToPage: goToTxPage,
+    setPageSize: setTxPageSize,
+  } = usePagination({
+    items: localTransactions,
+    initialPageSize: 6,
+    pageSizeOptions: [6, 12, 24],
+  });
 
   // Digital Signature Modal State
   const [showSignatureModal, setShowSignatureModal] = useState(false);
@@ -424,7 +443,7 @@ export default function DrumsView({
 
             {/* Mobile Transactions Cards (For small screens: compact, actionable, no horizontal table scroll) */}
             <div className="md:hidden space-y-2.5">
-              {localTransactions.map((tx) => (
+              {paginatedTransactions.map((tx) => (
                 <div
                   key={tx.id}
                   className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2"
@@ -500,7 +519,7 @@ export default function DrumsView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {localTransactions.map((tx) => (
+                  {paginatedTransactions.map((tx) => (
                     <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3 px-3 font-mono font-bold text-slate-700">{tx.id}</td>
                       <td className="py-3 px-3 font-semibold text-slate-900">{tx.customerName}</td>
@@ -561,6 +580,21 @@ export default function DrumsView({
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 mt-4">
+            <Pagination
+              currentPage={txCurrentPage}
+              totalPages={txTotalPages}
+              pageSize={txPageSize}
+              totalItems={txTotalItems}
+              startIndex={txStartIndex}
+              endIndex={txEndIndex}
+              onPageChange={goToTxPage}
+              onPageSizeChange={setTxPageSize}
+              pageSizeOptions={[6, 12, 24]}
+              compact
+            />
           </div>
         </div>
       </div>

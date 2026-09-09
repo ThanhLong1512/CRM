@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import type { RemixStaffUser } from "@/lib/remix/load-bootstrap";
 import type { UserRole } from "@prisma/client";
 import { Shield, Users } from "lucide-react";
+import { usePagination } from "../../hooks/usePagination";
+import Pagination from "../common/Pagination";
+
 
 const ROLES: UserRole[] = [
   "ADMIN",
@@ -27,6 +30,22 @@ export default function StaffRBACView({
   useEffect(() => {
     setLocalUsers(staffUsers);
   }, [staffUsers]);
+
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    paginatedItems: paginatedUsers,
+    startIndex,
+    endIndex,
+    totalItems,
+    goToPage,
+    setPageSize,
+  } = usePagination({
+    items: localUsers,
+    initialPageSize: 8,
+    pageSizeOptions: [8, 16, 32],
+  });
 
   return (
     <div id="staff-rbac-view" className="w-full space-y-6">
@@ -62,7 +81,7 @@ export default function StaffRBACView({
             Chưa có user trong DB.
           </div>
         ) : (
-          localUsers.map((user) => (
+          paginatedUsers.map((user) => (
             <div
               key={user.id}
               className="space-y-2.5 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs"
@@ -123,7 +142,7 @@ export default function StaffRBACView({
                 </td>
               </tr>
             ) : (
-              localUsers.map((user) => (
+              paginatedUsers.map((user) => (
                 <tr
                   key={user.id}
                   className="border-b border-slate-50 last:border-0"
@@ -161,6 +180,20 @@ export default function StaffRBACView({
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          onPageChange={goToPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[8, 16, 32]}
+        />
       </div>
     </div>
   );

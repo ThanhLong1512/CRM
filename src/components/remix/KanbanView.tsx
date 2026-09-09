@@ -3,6 +3,7 @@
 import {
   useMemo,
   useState,
+  useEffect,
   type HTMLAttributes,
   type PointerEvent as ReactPointerEvent,
   type MouseEvent as ReactMouseEvent,
@@ -45,6 +46,8 @@ import {
   Ban,
   Printer,
   MessageCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { ActionMenu, type ActionMenuItem } from "@/components/common/ActionMenu";
 import OrderPrintReceipt from "./OrderPrintReceipt";
@@ -500,11 +503,24 @@ function DroppableColumn({
   onApproveCreditOverride?: (orderId: string) => void;
   onRejectCreditOverride?: (orderId: string, reason?: string) => void;
 }) {
+  const [colPage, setColPage] = useState(1);
+  const pageSize = 6;
+  const totalPages = Math.max(1, Math.ceil(orders.length / pageSize));
+
+  useEffect(() => {
+    if (colPage > totalPages) {
+      setColPage(totalPages);
+    }
+  }, [orders.length, totalPages, colPage]);
+
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
     data: { type: "column", status: column.id },
   });
   const ColIcon = column.icon;
+
+  const startIdx = (colPage - 1) * pageSize;
+  const displayedOrders = orders.slice(startIdx, startIdx + pageSize);
 
   return (
     <div
@@ -533,7 +549,7 @@ function DroppableColumn({
             {isOver ? "Thả đơn vào đây" : "Kéo đơn vào đây"}
           </div>
         ) : (
-          orders.map((order) => (
+          displayedOrders.map((order) => (
             <DraggableOrderCard
               key={order.id}
               order={order}
@@ -555,6 +571,34 @@ function DroppableColumn({
           ))
         )}
       </div>
+
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-between border-t border-slate-200/80 pt-2.5 text-[11px] font-medium text-slate-600 select-none">
+          <button
+            type="button"
+            disabled={colPage <= 1}
+            onClick={() => setColPage((p) => Math.max(1, p - 1))}
+            className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2 py-1 text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-35 disabled:pointer-events-none cursor-pointer"
+          >
+            <ChevronLeft className="size-3.5" />
+            <span>Trước</span>
+          </button>
+
+          <span className="font-mono text-xs font-bold text-slate-700">
+            {colPage} / {totalPages}
+          </span>
+
+          <button
+            type="button"
+            disabled={colPage >= totalPages}
+            onClick={() => setColPage((p) => Math.min(totalPages, p + 1))}
+            className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white px-2 py-1 text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-35 disabled:pointer-events-none cursor-pointer"
+          >
+            <span>Sau</span>
+            <ChevronRight className="size-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
