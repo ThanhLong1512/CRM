@@ -11,6 +11,10 @@ export type CustomerDto = {
   currentDebt: number;
   debtAging?: DebtAging;
   outstandingDrums: number;
+  dealerTier?: "GOLD" | "SILVER" | "RETAIL";
+  creditOverridden?: boolean;
+  creditOverrideReason?: string | null;
+  creditOverrideApprovedBy?: string | null;
   lat: number | null;
   lng: number | null;
   createdAt?: string;

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionDbUser } from "@/lib/auth";
 import { listDrumTransactions } from "@/lib/data/drums";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 export type DrumActionResult = {
   success: boolean;
@@ -21,6 +22,9 @@ function ok(message: string): DrumActionResult {
 
 function revalidateDrumPaths() {
   revalidatePath("/vo-phuy");
+  revalidatePath("/khach-hang");
+  revalidatePath("/dashboard");
+  revalidatePath("/don-hang");
 }
 
 async function requireActor() {
@@ -36,11 +40,17 @@ export async function issueDrums(input: {
   quantity: number;
   productId?: string;
   notes?: string;
+  depositPerDrum?: number;
+  chargeToDebt?: boolean;
+  signedBy?: string;
+  signature?: string;
 }): Promise<DrumActionResult> {
   const customerId = String(input.customerId ?? "").trim();
   const notes = String(input.notes ?? "").trim() || null;
   const productId = String(input.productId ?? "").trim() || null;
   const quantity = Number(input.quantity);
+  const depositPerDrum = Number(input.depositPerDrum || 400000);
+  const chargeToDebt = input.chargeToDebt !== false; // default true
 
   if (!customerId) return fail("Vui lòng chọn khách hàng.");
   if (!Number.isInteger(quantity) || quantity <= 0) {
@@ -53,7 +63,7 @@ export async function issueDrums(input: {
     await prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findUnique({
         where: { id: customerId },
-        select: { id: true, outstandingDrums: true },
+        select: { id: true, outstandingDrums: true, currentDebt: true },
       });
       if (!customer) throw new Error("Không tìm thấy khách hàng.");
 
@@ -67,20 +77,30 @@ export async function issueDrums(input: {
         }
       }
 
+      const chargeAmount = chargeToDebt ? quantity * depositPerDrum : 0;
+
       await tx.drumTransaction.create({
         data: {
           customerId,
           type: "ISSUE",
           quantity,
+          depositDeducted: new Prisma.Decimal(chargeAmount),
           productId,
           notes,
+          signedBy: input.signedBy || null,
+          signature: input.signature || null,
           userId: actor.id,
         },
       });
 
       await tx.customer.update({
         where: { id: customerId },
-        data: { outstandingDrums: customer.outstandingDrums + quantity },
+        data: {
+          outstandingDrums: customer.outstandingDrums + quantity,
+          currentDebt: chargeAmount > 0
+            ? new Prisma.Decimal(Number(customer.currentDebt) + chargeAmount)
+            : undefined,
+        },
       });
     });
   } catch (error) {
@@ -90,17 +110,23 @@ export async function issueDrums(input: {
   }
 
   revalidateDrumPaths();
-  return ok(`Đã xuất ${quantity} vỏ phuy.`);
+  return ok(`Đã xuất ${quantity} vỏ phuy${chargeToDebt ? ` (+${(quantity * depositPerDrum).toLocaleString("vi-VN")} đ cọc)` : ""}.`);
 }
 
 export async function returnDrums(input: {
   customerId: string;
   quantity: number;
   notes?: string;
+  depositPerDrum?: number;
+  deductFromDebt?: boolean;
+  signedBy?: string;
+  signature?: string;
 }): Promise<DrumActionResult> {
   const customerId = String(input.customerId ?? "").trim();
   const notes = String(input.notes ?? "").trim() || null;
   const quantity = Number(input.quantity);
+  const depositPerDrum = Number(input.depositPerDrum || 400000);
+  const deductFromDebt = input.deductFromDebt !== false; // default true
 
   if (!customerId) return fail("Vui lòng chọn khách hàng.");
   if (!Number.isInteger(quantity) || quantity <= 0) {
@@ -113,7 +139,7 @@ export async function returnDrums(input: {
     await prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findUnique({
         where: { id: customerId },
-        select: { id: true, outstandingDrums: true },
+        select: { id: true, outstandingDrums: true, currentDebt: true },
       });
       if (!customer) throw new Error("Không tìm thấy khách hàng.");
       if (quantity > customer.outstandingDrums) {
@@ -122,19 +148,28 @@ export async function returnDrums(input: {
         );
       }
 
+      const refundAmount = deductFromDebt ? quantity * depositPerDrum : 0;
+      const nextDebt = Math.max(0, Number(customer.currentDebt) - refundAmount);
+
       await tx.drumTransaction.create({
         data: {
           customerId,
           type: "RETURN",
           quantity,
+          depositDeducted: new Prisma.Decimal(refundAmount),
           notes,
+          signedBy: input.signedBy || null,
+          signature: input.signature || null,
           userId: actor.id,
         },
       });
 
       await tx.customer.update({
         where: { id: customerId },
-        data: { outstandingDrums: customer.outstandingDrums - quantity },
+        data: {
+          outstandingDrums: customer.outstandingDrums - quantity,
+          currentDebt: new Prisma.Decimal(nextDebt),
+        },
       });
     });
   } catch (error) {
@@ -144,7 +179,7 @@ export async function returnDrums(input: {
   }
 
   revalidateDrumPaths();
-  return ok(`Đã thu ${quantity} vỏ phuy.`);
+  return ok(`Đã thu ${quantity} vỏ phuy${deductFromDebt ? ` (Đã cấn trừ -${(quantity * depositPerDrum).toLocaleString("vi-VN")} đ vào công nợ)` : ""}.`);
 }
 
 /** Điều chỉnh số dư đang giữ về đúng `targetOutstanding`. */

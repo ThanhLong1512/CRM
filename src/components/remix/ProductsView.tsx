@@ -23,8 +23,11 @@ import {
   Truck,
   ArrowUpDown,
   BookOpen,
+  PackagePlus,
 } from 'lucide-react';
 import LubeGuideModal from './LubeGuideModal';
+import { ActionMenu, PageActionMenu } from '@/components/common/ActionMenu';
+import { getContainerLiters } from '@/lib/unitConverter';
 
 interface ProductsViewProps {
   products: Product[];
@@ -41,17 +44,23 @@ type SlimForm = {
   standards: string;
   drumReturnable: boolean;
   priceDealer: number;
+  wholesalePrice: number;
+  garagePrice: number;
+  retailPrice: number;
   stock: number;
 };
 
 const emptyForm = (): SlimForm => ({
   name: '',
   sku: `DN-${Date.now().toString().slice(-4)}`,
-  packageType: 'Thùng 18L',
+  packageType: 'Phuy 208L',
   viscosity: '',
   standards: '',
-  drumReturnable: false,
+  drumReturnable: true,
   priceDealer: 0,
+  wholesalePrice: 0,
+  garagePrice: 0,
+  retailPrice: 0,
   stock: 0,
 });
 
@@ -76,12 +85,17 @@ export default function ProductsView({
   const [showLubeGuide, setShowLubeGuide] = useState(false);
 
   const totalSKUs = products.length;
+  const isDrumPkg = (pkg: string) => pkg === 'Phuy 208L' || pkg === 'Phuy 200L';
   const drumStockCount = products
-    .filter((p) => p.packageType === 'Phuy 200L')
+    .filter((p) => isDrumPkg(p.packageType))
     .reduce((sum, p) => sum + p.stock, 0);
   const smallPackageStockCount = products
-    .filter((p) => p.packageType !== 'Phuy 200L')
+    .filter((p) => !isDrumPkg(p.packageType))
     .reduce((sum, p) => sum + p.stock, 0);
+  const totalWarehouseLiters = products.reduce((sum, p) => {
+    const l = p.volumeLiters || getContainerLiters(p.packageType);
+    return sum + p.stock * l;
+  }, 0);
   const lowStockProducts = products.filter((p) => p.stock <= (p.minSafeStock || 5));
 
   const filteredProducts = useMemo(() => {
@@ -108,7 +122,10 @@ export default function ProductsView({
         viscosity: productToEdit.viscosity || '',
         standards: productToEdit.standards || '',
         drumReturnable: !!productToEdit.drumReturnable,
-        priceDealer: productToEdit.priceDealer,
+        priceDealer: productToEdit.wholesalePrice || productToEdit.priceDealer,
+        wholesalePrice: productToEdit.wholesalePrice || productToEdit.priceDealer,
+        garagePrice: productToEdit.garagePrice || productToEdit.priceMechanic,
+        retailPrice: productToEdit.retailPrice || productToEdit.priceFleet,
         stock: productToEdit.stock,
       });
     } else {
@@ -123,11 +140,11 @@ export default function ProductsView({
     if (!formData.name.trim() || !formData.sku.trim()) return;
 
     const unit =
-      formData.packageType === 'Phuy 200L'
-        ? 'Phuy (200L)'
-        : formData.packageType === 'Thùng 18L'
-          ? 'Thùng (18L)'
-          : formData.packageType === 'Xô 4L'
+      formData.packageType === 'Phuy 208L' || formData.packageType === 'Phuy 200L'
+        ? 'Phuy (208L)'
+        : formData.packageType === 'Thùng 18L' || formData.packageType === 'Xô 18L'
+          ? 'Xô (18L)'
+          : formData.packageType === 'Xô 4L' || formData.packageType === 'Can 4L'
             ? 'Can (4L)'
             : 'Chai (1L)';
 
@@ -136,8 +153,12 @@ export default function ProductsView({
         ...editingProduct,
         ...formData,
         unit,
-        priceMechanic: formData.priceDealer,
-        priceFleet: formData.priceDealer,
+        priceDealer: formData.wholesalePrice || formData.priceDealer,
+        priceMechanic: formData.garagePrice || formData.priceDealer,
+        priceFleet: formData.retailPrice || formData.priceDealer,
+        wholesalePrice: formData.wholesalePrice || formData.priceDealer,
+        garagePrice: formData.garagePrice || formData.priceDealer,
+        retailPrice: formData.retailPrice || formData.priceDealer,
       });
     } else {
       const newProduct: Product = {
@@ -147,8 +168,12 @@ export default function ProductsView({
         brand: '',
         category: '',
         baseOil: 'Khoáng',
-        priceMechanic: formData.priceDealer,
-        priceFleet: formData.priceDealer,
+        priceDealer: formData.wholesalePrice || formData.priceDealer,
+        priceMechanic: formData.garagePrice || formData.priceDealer,
+        priceFleet: formData.retailPrice || formData.priceDealer,
+        wholesalePrice: formData.wholesalePrice || formData.priceDealer,
+        garagePrice: formData.garagePrice || formData.priceDealer,
+        retailPrice: formData.retailPrice || formData.priceDealer,
         minSafeStock: 5,
         maxStock: Math.max(formData.stock, 100),
         vatPercent: 10,
@@ -173,6 +198,7 @@ export default function ProductsView({
   // Helper for color coding package types
   const getPackageBadge = (pkg: PackageType) => {
     switch (pkg) {
+      case 'Phuy 208L':
       case 'Phuy 200L':
         return {
           bg: 'bg-cyan-50 text-cyan-800 border-cyan-300',
@@ -180,12 +206,14 @@ export default function ProductsView({
           icon: '🛢️',
         };
       case 'Thùng 18L':
+      case 'Xô 18L':
         return {
           bg: 'bg-amber-50 text-amber-800 border-amber-300',
           dot: 'bg-amber-600',
           icon: '📦',
         };
       case 'Xô 4L':
+      case 'Can 4L':
         return {
           bg: 'bg-orange-50 text-orange-800 border-orange-300',
           dot: 'bg-orange-600',
@@ -219,18 +247,20 @@ export default function ProductsView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowLubeGuide(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-800 shadow-xs transition-all hover:bg-slate-50 cursor-pointer"
-          >
-            <BookOpen className="w-4 h-4 text-amber-600" />
-            <span>Tra Cứu Lube Guide &amp; Đổi Mã Nhớt</span>
-          </button>
+          <PageActionMenu
+            label="Thao tác"
+            items={[
+              {
+                label: "Tra Cứu Lube Guide & Đổi Mã Nhớt",
+                icon: BookOpen,
+                onClick: () => setShowLubeGuide(true),
+              },
+            ]}
+          />
           <button
             id="btn-add-product"
             onClick={() => handleOpenDrawer()}
-            className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-xs transition-all hover:bg-amber-600 hover:shadow-sm cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-xs transition-all hover:bg-amber-400 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Thêm Sản Phẩm Mới</span>
@@ -239,7 +269,7 @@ export default function ProductsView({
       </div>
 
       {/* 2. KPI Summary 4 Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* KPI 1 */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
@@ -260,7 +290,7 @@ export default function ProductsView({
         {/* KPI 2 */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Tồn Kho Phuy Sắt 200L</span>
+            <span>Tồn Kho Phuy Sắt (208L)</span>
             <span className="text-sm">🛢️</span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -270,7 +300,7 @@ export default function ProductsView({
             <span className="text-xs text-slate-500 font-medium">phuy trong kho</span>
           </div>
           <div className="text-[11px] text-cyan-700 font-medium mt-1">
-            Quy đổi: <strong>{drumStockCount * 200} Lít</strong> dung tích
+            Quy đổi: <strong>{(drumStockCount * 208).toLocaleString('vi-VN')} Lít</strong> (Tổng kho: <strong>{totalWarehouseLiters.toLocaleString('vi-VN')}L</strong>)
           </div>
         </div>
 
@@ -379,8 +409,8 @@ export default function ProductsView({
         </div>
       </div>
 
-      {/* 4. Professional Data Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+      {/* 4. Professional Data Table (Desktop >= md) */}
+      <div className="hidden md:block bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -475,43 +505,36 @@ export default function ProductsView({
                       <div className="space-y-0.5 text-[11px]">
                         <div className="flex items-center justify-between gap-2 text-slate-700">
                           <span className="text-slate-400 font-sans flex items-center gap-1">
-                            <Building2 className="w-3 h-3 text-amber-600" /> Đại lý:
+                            <Building2 className="w-3 h-3 text-amber-600" /> Đại lý Vàng:
                           </span>
                           <span className="font-bold text-slate-900">
-                            {formatVND(p.priceDealer)}
+                            {formatVND(p.wholesalePrice || p.priceDealer)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-2 text-slate-700">
                           <span className="text-slate-400 font-sans flex items-center gap-1">
-                            <Wrench className="w-3 h-3 text-purple-600" /> Thợ máy:
+                            <Wrench className="w-3 h-3 text-purple-600" /> Thợ / Gara:
                           </span>
                           <span className="font-semibold text-purple-900">
-                            {formatVND(p.priceMechanic)}
+                            {formatVND(p.garagePrice || p.priceMechanic)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-2 text-slate-700">
                           <span className="text-slate-400 font-sans flex items-center gap-1">
-                            <Truck className="w-3 h-3 text-blue-600" /> Fleet:
+                            <Truck className="w-3 h-3 text-blue-600" /> Bán lẻ / Fleet:
                           </span>
                           <span className="font-semibold text-blue-900">
-                            {formatVND(p.priceFleet)}
+                            {formatVND(p.retailPrice || p.priceFleet)}
                           </span>
                         </div>
                         {(() => {
-                          const liters =
-                            p.packageType === "Phuy 200L"
-                              ? 200
-                              : p.packageType === "Thùng 18L"
-                              ? 18
-                              : p.packageType === "Xô 4L"
-                              ? 4
-                              : 1;
-                          const perLiter = Math.round(p.priceDealer / liters);
+                          const liters = p.volumeLiters || getContainerLiters(p.packageType);
+                          const perLiter = Math.round((p.wholesalePrice || p.priceDealer) / liters);
                           return (
                             <div className="pt-1 border-t border-slate-100 flex items-center justify-between gap-2 text-[10px]">
                               <span className="text-slate-400 font-sans">Quy đổi Lít:</span>
                               <span className="font-extrabold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/80">
-                                ~{formatVND(perLiter)}/L
+                                ~{formatVND(perLiter)}/L ({liters}L)
                               </span>
                             </div>
                           );
@@ -523,9 +546,14 @@ export default function ProductsView({
                     <td className="py-3.5 px-4">
                       <div className="space-y-1.5 min-w-[130px]">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="font-mono font-bold text-slate-900 text-sm">
-                            {p.stock} <span className="text-xs text-slate-500 font-normal">{p.unit.split(' ')[0]}</span>
-                          </span>
+                          <div>
+                            <span className="font-mono font-bold text-slate-900 text-sm">
+                              {p.stock} <span className="text-xs text-slate-500 font-normal">{p.unit.split(' ')[0]}</span>
+                            </span>
+                            <div className="text-[10px] text-cyan-800 font-mono font-bold">
+                              = {((p.volumeLiters || getContainerLiters(p.packageType)) * p.stock).toLocaleString('vi-VN')} Lít
+                            </div>
+                          </div>
                           {isLowStock ? (
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 border border-rose-200 animate-pulse">
                               Sắp cạn
@@ -555,33 +583,36 @@ export default function ProductsView({
 
                     {/* Col 6: Actions */}
                     <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* Quick Stock Adjustment */}
-                        <button
-                          onClick={() => setStockAdjustModal({ product: p, delta: 10 })}
-                          className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-medium transition-colors cursor-pointer"
-                          title="Nhập thêm hàng nhanh"
-                        >
-                          + Nhập kho
-                        </button>
-                        <button
-                          onClick={() => handleOpenDrawer(p)}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
-                          title="Chỉnh sửa sản phẩm"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Bạn có chắc muốn xóa sản phẩm ${p.name}?`)) {
-                              onDeleteProduct(p.id);
-                            }
-                          }}
-                          className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                          title="Xóa sản phẩm"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div className="flex items-center justify-end">
+                        <ActionMenu
+                          variant="ghost"
+                          size="sm"
+                          align="end"
+                          title="Thao tác sản phẩm"
+                          items={[
+                            {
+                              label: "Nhập thêm hàng (+10)",
+                              icon: PackagePlus,
+                              onClick: () => setStockAdjustModal({ product: p, delta: 10 }),
+                            },
+                            {
+                              label: "Chỉnh sửa thông số",
+                              icon: Edit2,
+                              onClick: () => handleOpenDrawer(p),
+                            },
+                            "separator",
+                            {
+                              label: "Xóa sản phẩm",
+                              icon: Trash2,
+                              variant: "destructive",
+                              onClick: () => {
+                                if (confirm(`Bạn có chắc muốn xóa sản phẩm ${p.name}?`)) {
+                                  onDeleteProduct(p.id);
+                                }
+                              },
+                            },
+                          ]}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -590,6 +621,117 @@ export default function ProductsView({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* 4B. Mobile Card-based Product List (shows essential data: Name, SKU, Package, Price, Stock & ActionMenu) */}
+      <div className="space-y-3 md:hidden">
+        {filteredProducts.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-8 text-center text-xs text-slate-500">
+            Không tìm thấy sản phẩm phù hợp.
+          </div>
+        ) : (
+          filteredProducts.map((p) => {
+            const pkgBadge = getPackageBadge(p.packageType);
+            const isLowStock = p.stock <= p.minSafeStock;
+            return (
+              <div
+                key={`mobile-prod-${p.id}`}
+                className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs space-y-2.5"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="size-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-sm shadow-2xs">
+                      {pkgBadge.icon}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 bg-slate-100 text-slate-700 rounded border border-slate-200">
+                          {p.sku}
+                        </span>
+                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                          {p.brand}
+                        </span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 text-xs mt-0.5 line-clamp-1">
+                        {p.name}
+                      </h4>
+                    </div>
+                  </div>
+
+                  <ActionMenu
+                    variant="outline"
+                    size="sm"
+                    align="end"
+                    title="Thao tác"
+                    items={[
+                      {
+                        label: "Nhập thêm (+10)",
+                        icon: PackagePlus,
+                        onClick: () => setStockAdjustModal({ product: p, delta: 10 }),
+                      },
+                      {
+                        label: "Chỉnh sửa",
+                        icon: Edit2,
+                        onClick: () => handleOpenDrawer(p),
+                      },
+                      "separator",
+                      {
+                        label: "Xóa sản phẩm",
+                        icon: Trash2,
+                        variant: "destructive",
+                        onClick: () => {
+                          if (confirm(`Bạn có chắc muốn xóa sản phẩm ${p.name}?`)) {
+                            onDeleteProduct(p.id);
+                          }
+                        },
+                      },
+                    ]}
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    {p.viscosity}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded border font-semibold text-[10px] ${pkgBadge.bg}`}>
+                    {p.packageType}
+                  </span>
+                  {p.drumReturnable && (
+                    <span className="px-1.5 py-0.5 rounded border border-cyan-200 bg-cyan-50 text-[10px] font-bold text-cyan-800">
+                      Vỏ cọc
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Giá Đại lý</span>
+                    <span className="font-mono text-sm font-black text-slate-900">
+                      {formatVND(p.priceDealer)}
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 block">Tồn kho</span>
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono text-sm font-extrabold text-slate-900">
+                        {p.stock}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        {p.unit.split(" ")[0]}
+                      </span>
+                      {isLowStock && (
+                        <span className="rounded bg-rose-100 px-1 py-0.2 text-[9px] font-bold text-rose-700 animate-pulse">
+                          Cạn
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* 5. Sliding Drawer for Add/Edit Product */}
@@ -682,14 +824,17 @@ export default function ProductsView({
                       setFormData({
                         ...formData,
                         packageType: pkg,
-                        drumReturnable: pkg === 'Phuy 200L',
+                        drumReturnable: pkg === 'Phuy 208L' || pkg === 'Phuy 200L',
                       });
                     }}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs focus:border-amber-500"
                   >
+                    <option value="Phuy 208L">Phuy 208L (Chuẩn Quốc Tế)</option>
                     <option value="Phuy 200L">Phuy 200L</option>
                     <option value="Thùng 18L">Thùng 18L</option>
+                    <option value="Xô 18L">Xô 18L</option>
                     <option value="Xô 4L">Xô 4L</option>
+                    <option value="Can 4L">Can 4L</option>
                     <option value="Chai 1L">Chai 1L</option>
                   </select>
                 </div>
@@ -704,34 +849,70 @@ export default function ProductsView({
                   />
                   Sản phẩm gắn quản lý vỏ phuy (isDrum)
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-2.5">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Giá bán (VNĐ)
+                      Giá ĐL Vàng (đ)
                     </label>
                     <input
                       type="number"
                       min="0"
-                      value={formData.priceDealer}
+                      value={formData.wholesalePrice}
                       onChange={(e) =>
-                        setFormData({ ...formData, priceDealer: Number(e.target.value) })
+                        setFormData({
+                          ...formData,
+                          wholesalePrice: Number(e.target.value),
+                          priceDealer: Number(e.target.value),
+                        })
                       }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-mono font-bold focus:border-amber-500"
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs font-mono font-bold focus:border-amber-500"
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Tồn kho
+                      Giá Gara/Thợ (đ)
                     </label>
                     <input
                       type="number"
                       min="0"
-                      value={formData.stock}
+                      value={formData.garagePrice}
                       onChange={(e) =>
-                        setFormData({ ...formData, stock: Number(e.target.value) })
+                        setFormData({ ...formData, garagePrice: Number(e.target.value) })
                       }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-mono font-bold focus:border-amber-500"
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs font-mono font-bold focus:border-amber-500"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Giá Bán lẻ/Fleet (đ)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.retailPrice}
+                      onChange={(e) =>
+                        setFormData({ ...formData, retailPrice: Number(e.target.value) })
+                      }
+                      className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs font-mono font-bold focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Tồn kho thực tế ({formData.packageType.includes('Phuy') ? 'Phuy' : 'Đơn vị'})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.stock}
+                    onChange={(e) =>
+                      setFormData({ ...formData, stock: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-mono font-bold focus:border-amber-500"
+                  />
+                  <div className="mt-1 text-[11px] text-cyan-700 font-mono">
+                    = {(formData.stock * getContainerLiters(formData.packageType)).toLocaleString('vi-VN')} Lít tương đương
                   </div>
                 </div>
 

@@ -170,6 +170,7 @@ export default function SalesPWAView({
     drumDepositAmount: number;
     signatureBase64?: string;
     isEmergencyApproved: boolean;
+    emergencyReason?: string;
     cashCollected?: number;
   }) => {
     const newOrder: Order = {
@@ -183,6 +184,12 @@ export default function SalesPWAView({
       discountAmount: orderPayload.discountAmount,
       promotionNotes: orderPayload.promotionNotes,
       totalLiters: orderPayload.totalLiters,
+      drumDelivered: orderPayload.drumDelivered,
+      drumReturned: orderPayload.drumReturned,
+      drumDepositAmount: orderPayload.drumDepositAmount,
+      isCreditOverride: orderPayload.isEmergencyApproved,
+      creditOverrideReason: orderPayload.emergencyReason,
+      creditOverrideStatus: orderPayload.isEmergencyApproved ? 'PENDING' : undefined,
       items: orderPayload.items.map((it) => ({
         productId: it.product.id,
         productName: it.product.name,

@@ -1,10 +1,19 @@
 "use client";
 
-import { useMemo, useState, type ButtonHTMLAttributes } from "react";
+import {
+  useMemo,
+  useState,
+  type HTMLAttributes,
+  type PointerEvent as ReactPointerEvent,
+  type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
 import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCorners,
   useDroppable,
   useDraggable,
@@ -12,6 +21,9 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
+  type PointerSensorOptions,
+  type MouseSensorOptions,
+  type TouchSensorOptions,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Order, OrderStatus } from "../types";
@@ -31,17 +43,102 @@ import {
   Boxes,
   Layers,
   Ban,
-  GripVertical,
   Printer,
   MessageCircle,
 } from "lucide-react";
+import { ActionMenu, type ActionMenuItem } from "@/components/common/ActionMenu";
 import OrderPrintReceipt from "./OrderPrintReceipt";
 import ZaloShareModal from "./ZaloShareModal";
+
+/**
+ * Smart Sensors ignore pointer/mouse/touch events initiated on interactive elements
+ * (buttons, inputs, select, links, or [data-no-dnd='true']) so they remain 100% clickable
+ * while allowing any other empty area on the card to drag smoothly.
+ */
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!target) return false;
+  const el =
+    target instanceof Element
+      ? target
+      : (target as Node)?.parentElement instanceof Element
+        ? (target as Node).parentElement
+        : null;
+  return Boolean(
+    el?.closest(
+      "button, input, textarea, select, a, [data-no-dnd='true']",
+    ),
+  );
+}
+
+class SmartPointerSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: "onPointerDown" as const,
+      handler: (
+        { nativeEvent: event }: ReactPointerEvent,
+        { onActivation }: PointerSensorOptions,
+      ) => {
+        if (!event.isPrimary || event.button !== 0) {
+          return false;
+        }
+        if (isInteractiveTarget(event.target as HTMLElement | null)) {
+          return false;
+        }
+        onActivation?.({ event });
+        return true;
+      },
+    },
+  ];
+}
+
+class SmartMouseSensor extends MouseSensor {
+  static activators = [
+    {
+      eventName: "onMouseDown" as const,
+      handler: (
+        { nativeEvent: event }: ReactMouseEvent,
+        { onActivation }: MouseSensorOptions,
+      ) => {
+        if (event.button !== 0) {
+          return false;
+        }
+        if (isInteractiveTarget(event.target as HTMLElement | null)) {
+          return false;
+        }
+        onActivation?.({ event });
+        return true;
+      },
+    },
+  ];
+}
+
+class SmartTouchSensor extends TouchSensor {
+  static activators = [
+    {
+      eventName: "onTouchStart" as const,
+      handler: (
+        { nativeEvent: event }: ReactTouchEvent,
+        { onActivation }: TouchSensorOptions,
+      ) => {
+        if (event.touches.length > 1) {
+          return false;
+        }
+        if (isInteractiveTarget(event.target as HTMLElement | null)) {
+          return false;
+        }
+        onActivation?.({ event });
+        return true;
+      },
+    },
+  ];
+}
 
 interface KanbanViewProps {
   orders: Order[];
   onUpdateOrderStatus: (orderId: string, newStatus: OrderStatus) => void;
   onCancelOrder?: (orderId: string) => void;
+  onApproveCreditOverride?: (orderId: string) => void;
+  onRejectCreditOverride?: (orderId: string, reason?: string) => void;
 }
 
 const COLUMNS: {
@@ -103,23 +200,38 @@ function OrderCardBody({
   onPrint,
   onMove,
   onCancel,
-  dragHandleProps,
+  onApproveCreditOverride,
+  onRejectCreditOverride,
+  dragProps,
+  isDragging,
 }: {
   order: Order;
   onOpenDetail: () => void;
   onPrint?: () => void;
   onMove: (status: OrderStatus) => void;
   onCancel?: () => void;
-  dragHandleProps?: ButtonHTMLAttributes<HTMLButtonElement>;
+  onApproveCreditOverride?: () => void;
+  onRejectCreditOverride?: () => void;
+  dragProps?: HTMLAttributes<HTMLDivElement>;
+  isDragging?: boolean;
 }) {
   const nextSt = nextStatusMap[order.status];
   const prevSt = prevStatusMap[order.status];
   const canCancel = order.status !== "Hoàn thành";
+  const isPendingOverride = order.creditOverrideStatus === "PENDING";
+  const isApprovedOverride = order.creditOverrideStatus === "APPROVED";
 
   return (
     <div
-      className={`space-y-2.5 rounded-xl border bg-white p-3.5 shadow-xs transition-all hover:shadow-md ${
-        order.isOverCredit
+      {...dragProps}
+      className={`group relative space-y-2.5 rounded-xl border bg-white p-3.5 shadow-xs transition-all select-none cursor-grab active:cursor-grabbing hover:shadow-md hover:border-amber-300/80 ${
+        isDragging
+          ? "cursor-grabbing shadow-lg ring-2 ring-amber-400 opacity-90"
+          : ""
+      } ${
+        isPendingOverride
+          ? "border-amber-300 ring-2 ring-amber-200 bg-amber-50/20"
+          : order.isOverCredit
           ? "border-rose-300 ring-1 ring-rose-200"
           : "border-slate-200"
       }`}
@@ -127,17 +239,6 @@ function OrderCardBody({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            {dragHandleProps ? (
-              <button
-                type="button"
-                className="cursor-grab touch-none rounded border border-slate-200 bg-slate-50 p-0.5 text-slate-400 hover:text-slate-700 active:cursor-grabbing"
-                title="Kéo để đổi cột"
-                aria-label="Kéo đơn hàng"
-                {...dragHandleProps}
-              >
-                <GripVertical className="size-3.5" />
-              </button>
-            ) : null}
             <span className="rounded border border-slate-200 bg-slate-100 px-1.5 font-mono text-xs font-bold text-slate-700">
               {order.id.slice(0, 10)}
             </span>
@@ -149,13 +250,64 @@ function OrderCardBody({
             {order.customer}
           </div>
         </div>
-        {order.isOverCredit && (
+        {isPendingOverride ? (
+          <span className="flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-900 animate-pulse">
+            <ShieldAlert className="size-3 text-amber-700" />
+            CHỜ GĐ DUYỆT
+          </span>
+        ) : isApprovedOverride ? (
+          <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+            <CheckCircle2 className="size-3 text-emerald-600" />
+            ĐÃ BẢO LÃNH
+          </span>
+        ) : order.isOverCredit ? (
           <span className="flex shrink-0 items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
             <ShieldAlert className="size-3 text-rose-600" />
             VƯỢT TRẦN
           </span>
-        )}
+        ) : null}
       </div>
+
+      {isPendingOverride && onApproveCreditOverride && (
+        <div
+          data-no-dnd="true"
+          onPointerDown={(e) => e.stopPropagation()}
+          className="flex items-center justify-between gap-1.5 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs"
+        >
+          <div className="truncate font-semibold text-amber-900 text-[11px]">
+            {order.creditOverrideReason || "Vượt hạn mức nợ"}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={onApproveCreditOverride}
+              className="cursor-pointer rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-emerald-500 shadow-2xs transition-colors"
+              title="Phê duyệt bảo lãnh công nợ"
+            >
+              Duyệt
+            </button>
+            {onRejectCreditOverride && (
+              <button
+                type="button"
+                onClick={onRejectCreditOverride}
+                className="cursor-pointer rounded-md border border-rose-300 bg-white px-2 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-50 transition-colors"
+                title="Từ chối bảo lãnh"
+              >
+                Từ chối
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(order.drumDelivered || order.drumReturned) ? (
+        <div className="flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100 font-mono">
+          <span>Vỏ phuy:</span>
+          <span className="font-bold text-sky-800">
+            +{order.drumDelivered || 0} phuy / -{order.drumReturned || 0} vỏ
+          </span>
+        </div>
+      ) : null}
 
       <div className="flex items-baseline justify-between border-t border-slate-100 pt-1 text-xs">
         <span className="text-slate-400">Giá trị:</span>
@@ -165,7 +317,7 @@ function OrderCardBody({
       </div>
 
       {(order.pickingDetails || order.items?.length) && (
-        <div className="space-y-1.5 rounded-lg border border-slate-200/80 bg-slate-50 p-2">
+        <div className="hidden sm:block space-y-1.5 rounded-lg border border-slate-200/80 bg-slate-50 p-2">
           <div className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-slate-500 uppercase">
             <Boxes className="size-3 text-amber-600" />
             <span>Quy cách</span>
@@ -188,62 +340,91 @@ function OrderCardBody({
       )}
 
       <div className="flex items-center justify-between gap-1.5 border-t border-slate-100 pt-2">
-        {prevSt ? (
-          <button
-            type="button"
-            onClick={() => onMove(prevSt)}
-            className="cursor-pointer rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-100"
-            title={`Lùi về: ${prevSt}`}
-          >
-            <ArrowLeft className="size-3.5" />
-          </button>
-        ) : (
-          <div />
-        )}
+        <div className="flex items-center gap-1.5">
+          {prevSt ? (
+            <button
+              type="button"
+              data-no-dnd="true"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => onMove(prevSt)}
+              className="cursor-pointer rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-100 active:scale-95"
+              title={`Lùi về: ${prevSt}`}
+            >
+              <ArrowLeft className="size-3.5" />
+            </button>
+          ) : null}
 
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={onOpenDetail}
-            className="flex cursor-pointer items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200"
-          >
-            <Eye className="size-3 text-slate-500" />
-            Chi tiết
-          </button>
-          {onPrint ? (
-            <button
-              type="button"
-              onClick={onPrint}
-              className="cursor-pointer rounded-lg border border-slate-200 p-1.5 text-blue-600 transition-colors hover:bg-blue-50"
-              title="In phiếu xuất kho (K80 / A4)"
-            >
-              <Printer className="size-3.5" />
-            </button>
-          ) : null}
-          {canCancel && onCancel ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="cursor-pointer rounded-lg border border-rose-200 p-1.5 text-rose-600 transition-colors hover:bg-rose-50"
-              title="Hủy đơn"
-            >
-              <Ban className="size-3.5" />
-            </button>
-          ) : null}
+          <ActionMenu
+            variant="secondary"
+            size="sm"
+            align="start"
+            title="Tùy chọn đơn hàng"
+            items={[
+              {
+                label: "Xem chi tiết đơn",
+                icon: Eye,
+                onClick: onOpenDetail,
+              },
+              ...(isPendingOverride && onApproveCreditOverride
+                ? [
+                    {
+                      label: "Phê duyệt bảo lãnh (GĐ)",
+                      icon: CheckCircle2,
+                      onClick: onApproveCreditOverride,
+                    } as ActionMenuItem,
+                    ...(onRejectCreditOverride
+                      ? [
+                          {
+                            label: "Từ chối bảo lãnh (GĐ)",
+                            icon: Ban,
+                            variant: "destructive" as const,
+                            onClick: onRejectCreditOverride,
+                          } as ActionMenuItem,
+                        ]
+                      : []),
+                    "separator" as const,
+                  ]
+                : []),
+              ...(onPrint
+                ? [
+                    {
+                      label: "In phiếu xuất kho (K80 / A4)",
+                      icon: Printer,
+                      onClick: onPrint,
+                    } as ActionMenuItem,
+                  ]
+                : []),
+              ...(canCancel && onCancel
+                ? [
+                    "separator" as const,
+                    {
+                      label: "Hủy đơn hàng",
+                      icon: Ban,
+                      variant: "destructive" as const,
+                      onClick: onCancel,
+                    } as ActionMenuItem,
+                  ]
+                : []),
+            ]}
+          />
         </div>
 
         {nextSt ? (
           <button
             type="button"
+            data-no-dnd="true"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={() => onMove(nextSt)}
-            className="flex cursor-pointer items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600"
+            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 shadow-xs transition-colors hover:bg-amber-600 active:scale-95"
             title={`Chuyển sang: ${nextSt}`}
           >
             <span>Chuyển</span>
             <ArrowRight className="size-3" />
           </button>
         ) : (
-          <div />
+          <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+            ✓ Đã hoàn tất
+          </span>
         )}
       </div>
     </div>
@@ -256,12 +437,16 @@ function DraggableOrderCard({
   onPrint,
   onMove,
   onCancel,
+  onApproveCreditOverride,
+  onRejectCreditOverride,
 }: {
   order: Order;
   onOpenDetail: () => void;
   onPrint?: () => void;
   onMove: (status: OrderStatus) => void;
   onCancel?: () => void;
+  onApproveCreditOverride?: () => void;
+  onRejectCreditOverride?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -275,14 +460,22 @@ function DraggableOrderCard({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="touch-none cursor-grab active:cursor-grabbing"
+    >
       <OrderCardBody
         order={order}
         onOpenDetail={onOpenDetail}
         onPrint={onPrint}
         onMove={onMove}
         onCancel={onCancel}
-        dragHandleProps={{ ...listeners, ...attributes }}
+        onApproveCreditOverride={onApproveCreditOverride}
+        onRejectCreditOverride={onRejectCreditOverride}
+        isDragging={isDragging}
       />
     </div>
   );
@@ -295,6 +488,8 @@ function DroppableColumn({
   onPrint,
   onMove,
   onCancel,
+  onApproveCreditOverride,
+  onRejectCreditOverride,
 }: {
   column: (typeof COLUMNS)[number];
   orders: Order[];
@@ -302,6 +497,8 @@ function DroppableColumn({
   onPrint: (order: Order) => void;
   onMove: (orderId: string, status: OrderStatus) => void;
   onCancel?: (orderId: string) => void;
+  onApproveCreditOverride?: (orderId: string) => void;
+  onRejectCreditOverride?: (orderId: string, reason?: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -344,6 +541,16 @@ function DroppableColumn({
               onPrint={() => onPrint(order)}
               onMove={(status) => onMove(order.id, status)}
               onCancel={onCancel ? () => onCancel(order.id) : undefined}
+              onApproveCreditOverride={
+                onApproveCreditOverride
+                  ? () => onApproveCreditOverride(order.id)
+                  : undefined
+              }
+              onRejectCreditOverride={
+                onRejectCreditOverride
+                  ? () => onRejectCreditOverride(order.id)
+                  : undefined
+              }
             />
           ))
         )}
@@ -356,15 +563,22 @@ export default function KanbanView({
   orders,
   onUpdateOrderStatus,
   onCancelOrder,
+  onApproveCreditOverride,
+  onRejectCreditOverride,
 }: KanbanViewProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
   const [zaloOrder, setZaloOrder] = useState<Order | null>(null);
-  const [filterSearch, setFilterSearch] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [filterSearch, setFilterSearch] = useState("");
+  const [mobileColumnTab, setMobileColumnTab] = useState<string>("all");
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(SmartPointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(SmartMouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(SmartTouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 5 },
+    }),
   );
 
   const handleMoveOrder = (orderId: string, newStatus: OrderStatus) => {
@@ -434,7 +648,7 @@ export default function KanbanView({
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-500">
-              Kéo icon ⋮⋮ trên thẻ sang cột khác để cập nhật trạng thái —{" "}
+              Kéo thả thẻ đơn hàng sang cột khác để cập nhật trạng thái —{" "}
               {filteredOrders.length}/{orders.length} đơn
             </p>
           </div>
@@ -452,6 +666,50 @@ export default function KanbanView({
         </div>
       </div>
 
+      {/* Mobile Column Tabs Switcher: Allows tapping between columns instead of giant scrolling */}
+      <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        <button
+          type="button"
+          onClick={() => setMobileColumnTab("all")}
+          className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+            mobileColumnTab === "all"
+              ? "bg-slate-900 text-amber-400 shadow-xs"
+              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          Tất cả ({filteredOrders.length})
+        </button>
+        {COLUMNS.map((col) => {
+          const count = filteredOrders.filter((o) => o.status === col.id).length;
+          const isSelected = mobileColumnTab === col.id;
+          const ColIcon = col.icon;
+          return (
+            <button
+              key={`tab-${col.id}`}
+              type="button"
+              onClick={() => setMobileColumnTab(col.id)}
+              className={`shrink-0 flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                isSelected
+                  ? "bg-amber-500 text-slate-950 shadow-xs ring-2 ring-amber-400/50"
+                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <ColIcon className="size-3.5" />
+              <span>{col.label}</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono font-bold ${
+                  isSelected
+                    ? "bg-slate-950/20 text-slate-950"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -461,17 +719,25 @@ export default function KanbanView({
       >
         <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2 xl:grid-cols-4">
           {COLUMNS.map((col) => {
+            const isVisibleOnMobile =
+              mobileColumnTab === "all" || mobileColumnTab === col.id;
             const colOrders = filteredOrders.filter((o) => o.status === col.id);
             return (
-              <DroppableColumn
+              <div
                 key={col.id}
-                column={col}
-                orders={colOrders}
-                onOpenDetail={setSelectedOrder}
-                onPrint={setPrintingOrder}
-                onMove={handleMoveOrder}
-                onCancel={onCancelOrder}
-              />
+                className={isVisibleOnMobile ? "block" : "hidden md:block"}
+              >
+                <DroppableColumn
+                  column={col}
+                  orders={colOrders}
+                  onOpenDetail={setSelectedOrder}
+                  onPrint={setPrintingOrder}
+                  onMove={handleMoveOrder}
+                  onCancel={onCancelOrder}
+                  onApproveCreditOverride={onApproveCreditOverride}
+                  onRejectCreditOverride={onRejectCreditOverride}
+                />
+              </div>
             );
           })}
         </div>
@@ -483,6 +749,7 @@ export default function KanbanView({
                 order={activeOrder}
                 onOpenDetail={() => undefined}
                 onMove={() => undefined}
+                isDragging
               />
             </div>
           ) : null}
@@ -515,14 +782,74 @@ export default function KanbanView({
               </button>
             </div>
 
-            {selectedOrder.isOverCredit && (
+            {selectedOrder.creditOverrideStatus === "PENDING" ? (
+              <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-950">
+                <div className="flex items-center gap-2 font-black text-amber-900">
+                  <ShieldAlert className="size-4 text-amber-600" />
+                  <span>Đơn hàng đang chờ Ban Giám Đốc (ADMIN) phê duyệt bảo lãnh</span>
+                </div>
+                <div className="text-[11px] text-amber-800">
+                  Lý do đề xuất: <strong>{selectedOrder.creditOverrideReason || "Khách hàng vượt hạn mức công nợ"}</strong>
+                </div>
+                {onApproveCreditOverride && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onApproveCreditOverride(selectedOrder.id);
+                        setSelectedOrder(null);
+                      }}
+                      className="cursor-pointer rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white text-xs hover:bg-emerald-500 shadow-xs transition-colors"
+                    >
+                      ✓ Phê Duyệt Bảo Lãnh (GĐ)
+                    </button>
+                    {onRejectCreditOverride && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onRejectCreditOverride(selectedOrder.id);
+                          setSelectedOrder(null);
+                        }}
+                        className="cursor-pointer rounded-lg border border-rose-300 bg-white px-3 py-1.5 font-bold text-rose-700 text-xs hover:bg-rose-50 transition-colors"
+                      >
+                        ✕ Từ Chối Bảo Lãnh
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : selectedOrder.creditOverrideStatus === "APPROVED" ? (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                <CheckCircle2 className="size-4 text-emerald-600" />
+                <span>
+                  Đã được phê duyệt bảo lãnh bởi: <strong>{selectedOrder.creditOverrideApprovedBy || "Ban Giám Đốc"}</strong>
+                </span>
+              </div>
+            ) : selectedOrder.isOverCredit ? (
               <div className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
                 <div className="flex items-center gap-1.5 font-bold">
                   <ShieldAlert className="size-4 text-rose-600" />
                   Đơn vượt trần hạn mức công nợ
                 </div>
               </div>
-            )}
+            ) : null}
+
+            {(selectedOrder.drumDelivered || selectedOrder.drumReturned || selectedOrder.drumDepositAmount) ? (
+              <div className="flex items-center justify-between rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900 font-mono">
+                <div>
+                  <span className="font-bold">Giao nhận vỏ phuy sắt:</span>
+                  <div className="text-[11px] text-sky-700">
+                    Giao mới: +{selectedOrder.drumDelivered || 0} phuy · Thu vỏ: -{selectedOrder.drumReturned || 0} vỏ
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] text-sky-600 uppercase font-sans font-bold">Cọc phuy (400k/vỏ)</div>
+                  <div className="font-black text-sky-950 text-sm">
+                    {formatVND(selectedOrder.drumDepositAmount || 0)}
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div>
               <div className="mb-2 text-xs font-bold text-slate-700 uppercase">

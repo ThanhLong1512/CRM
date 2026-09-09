@@ -4,6 +4,13 @@ import { useState, useEffect, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+  LayoutDashboard,
+  Users,
+  ShoppingCart,
+  Layers,
+  Menu,
+} from "lucide-react";
+import {
   Product,
   Customer,
   FleetVehicle,
@@ -17,9 +24,15 @@ import { soundFX } from "@/components/utils/audio";
 import type { DashboardOverview } from "@/lib/data/dashboard";
 import type { DrumStats } from "@/lib/data/drums";
 import type { RfmOverview } from "@/lib/data/rfm";
-import { mapRemixOrderStatusToPrisma } from "@/lib/remix/mappers";
 import type { RemixStaffUser } from "@/lib/remix/load-bootstrap";
-import { createOrder, updateOrderStatus, cancelOrder } from "@/app/(private)/don-hang/actions";
+import { mapRemixOrderStatusToPrisma } from "@/lib/remix/mappers";
+import {
+  createOrder,
+  updateOrderStatus,
+  cancelOrder,
+  approveCreditOverride,
+  rejectCreditOverride,
+} from "@/app/(private)/don-hang/actions";
 import {
   createProduct,
   deleteProduct,
@@ -462,6 +475,12 @@ export default function RemixAppContainer({
         discountPercent: newOrder.discountPercent,
         discountAmount: newOrder.discountAmount,
         promotionNotes: newOrder.promotionNotes,
+        drumDelivered: newOrder.drumDelivered ?? newOrder.drumExchange?.delivered,
+        drumReturned: newOrder.drumReturned ?? newOrder.drumExchange?.returned,
+        drumDepositUnitPrice: 400000,
+        isCreditOverride: newOrder.isCreditOverride,
+        creditOverrideReason: newOrder.creditOverrideReason,
+        signature: newOrder.signature,
         items: newOrder.items.map((i) => ({
           productId: i.productId,
           quantity: i.quantity,
@@ -490,6 +509,12 @@ export default function RemixAppContainer({
           discountPercent: order.discountPercent,
           discountAmount: order.discountAmount,
           promotionNotes: order.promotionNotes,
+          drumDelivered: order.drumDelivered ?? order.drumExchange?.delivered,
+          drumReturned: order.drumReturned ?? order.drumExchange?.returned,
+          drumDepositUnitPrice: 400000,
+          isCreditOverride: order.isCreditOverride,
+          creditOverrideReason: order.creditOverrideReason,
+          signature: order.signature,
           items: order.items.map((i) => ({
             productId: i.productId,
             quantity: i.quantity,
@@ -500,6 +525,53 @@ export default function RemixAppContainer({
         }
       }
       toast.success("Đã đồng bộ hàng đợi offline.");
+      router.refresh();
+    });
+  };
+
+  const handleApproveOrderCreditOverride = (orderId: string) => {
+    startTransition(async () => {
+      const result = await approveCreditOverride(orderId);
+      if (!result.success) {
+        toast.error(result.error ?? result.message);
+        return;
+      }
+      soundFX.playSuccess();
+      toast.success(result.message);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: "Xuất kho",
+                creditOverrideStatus: "APPROVED",
+                creditOverrideApprovedBy: resolvedSessionUser.name,
+              }
+            : o,
+        ),
+      );
+      router.refresh();
+    });
+  };
+
+  const handleRejectOrderCreditOverride = (orderId: string, reason?: string) => {
+    startTransition(async () => {
+      const result = await rejectCreditOverride(orderId, reason);
+      if (!result.success) {
+        toast.error(result.error ?? result.message);
+        return;
+      }
+      toast.success(result.message);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                creditOverrideStatus: "REJECTED",
+              }
+            : o,
+        ),
+      );
       router.refresh();
     });
   };
@@ -989,7 +1061,7 @@ export default function RemixAppContainer({
           onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 pb-24 lg:pb-8">
           <div className="mx-auto max-w-7xl">
             {currentModule === "dashboard" && (
               <DashboardView
@@ -1043,6 +1115,8 @@ export default function RemixAppContainer({
                 orders={orders}
                 onUpdateOrderStatus={handleUpdateOrderStatus}
                 onCancelOrder={handleCancelOrder}
+                onApproveCreditOverride={handleApproveOrderCreditOverride}
+                onRejectCreditOverride={handleRejectOrderCreditOverride}
               />
             )}
 
@@ -1103,6 +1177,91 @@ export default function RemixAppContainer({
           </div>
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar (Thumb-friendly 1-tap navigation for mobile field staff) */}
+      <nav
+        id="mobile-bottom-nav"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 py-1.5 px-3 flex items-center justify-around shadow-xl select-none"
+      >
+        <button
+          type="button"
+          onClick={() => {
+            soundFX.playClick();
+            handleSelectModule("dashboard");
+          }}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            currentModule === "dashboard"
+              ? "text-amber-600 font-bold"
+              : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <LayoutDashboard className="size-5" />
+          <span className="text-[10px] leading-tight">Tổng quan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            soundFX.playClick();
+            handleSelectModule("customers");
+          }}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            currentModule === "customers"
+              ? "text-amber-600 font-bold"
+              : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Users className="size-5" />
+          <span className="text-[10px] leading-tight">Khách hàng</span>
+        </button>
+
+        {/* Central Prominent Sales CTA Button */}
+        <button
+          type="button"
+          onClick={() => {
+            soundFX.playClick();
+            handleSelectModule("sales_pwa");
+          }}
+          className="flex flex-col items-center -mt-5 cursor-pointer"
+          title="Lên đơn bán hàng thực địa"
+        >
+          <div className="size-12 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg ring-4 ring-white active:scale-95 transition-all">
+            <ShoppingCart className="size-5" />
+          </div>
+          <span className="text-[10px] font-bold text-slate-800 mt-0.5">Lên đơn</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            soundFX.playClick();
+            handleSelectModule("kanban");
+          }}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl relative transition-all cursor-pointer ${
+            currentModule === "kanban"
+              ? "text-amber-600 font-bold"
+              : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Layers className="size-5" />
+          <span className="text-[10px] leading-tight">Đơn hàng</span>
+          {pendingOrdersCount > 0 && (
+            <span className="absolute top-0 right-1 size-2 rounded-full bg-rose-500 ring-2 ring-white" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            soundFX.playClick();
+            setIsMobileMenuOpen(true);
+          }}
+          className="flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-slate-500 hover:text-slate-900 transition-all cursor-pointer"
+        >
+          <Menu className="size-5" />
+          <span className="text-[10px] leading-tight">Thêm</span>
+        </button>
+      </nav>
     </div>
   );
 }

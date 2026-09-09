@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition } from "react";
 import {
@@ -6,13 +6,26 @@ import {
   CloudOff,
   RefreshCw,
   Menu,
+  Zap,
+  ShoppingBag,
+  Layers,
+  Users,
+  Boxes,
+  Truck,
+  QrCode,
+  Package,
+  BarChart3,
+  ChevronDown,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ActionMenu } from "@/components/common/ActionMenu";
 import { logout } from "@/app/auth/actions";
 import ChangePasswordModal from "@/components/auth/ChangePasswordModal";
 import LogoutConfirmDialog from "@/components/auth/LogoutConfirmDialog";
 import UserProfileModal from "@/components/auth/UserProfileModal";
 import type { AuthUserProfile } from "@/components/auth/authData";
 import { soundFX } from "@/components/utils/audio";
+import AppLogo from "@/components/common/AppLogo";
 
 interface HeaderProps {
   currentModuleName: string;
@@ -37,6 +50,7 @@ export default function Header({
   const [changePwOpen, setChangePwOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const initials = sessionUser.name
     .split(" ")
@@ -69,12 +83,13 @@ export default function Header({
               <Menu className="h-5 w-5" />
             </button>
           )}
+          <div className="flex lg:hidden items-center shrink-0">
+            <AppLogo variant="compact" />
+          </div>
           <div className="flex min-w-0 items-center gap-2">
-            <div className="hidden shrink-0 items-center gap-1.5 font-mono text-xs font-medium text-slate-400 md:flex">
-              <span className="font-bold text-amber-600">DMS</span>
-              <span>/</span>
-              <span className="text-slate-600">Remix Lubricants</span>
-              <span className="text-slate-300">|</span>
+            <div className="hidden shrink-0 items-center gap-2 font-medium text-slate-400 md:flex">
+              <AppLogo variant="header" />
+              <span className="text-slate-300 font-light text-sm">/</span>
             </div>
             <h1 className="truncate text-sm font-bold tracking-tight text-slate-900 sm:text-base md:text-lg">
               {currentModuleName}
@@ -83,6 +98,67 @@ export default function Header({
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {/* Quick Actions Global Launcher */}
+          <ActionMenu
+            align="end"
+            variant="outline"
+            menuClassName="min-w-[220px]"
+            trigger={
+              <button
+                type="button"
+                className="hidden sm:flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
+                title="Mở danh mục thao tác nhanh toàn hệ thống"
+              >
+                <Zap className="size-3.5 text-amber-500 fill-amber-500" />
+                <span>Thao tác nhanh</span>
+                <ChevronDown className="size-3 text-slate-400" />
+              </button>
+            }
+            items={[
+              {
+                label: "Lên đơn bán hàng (Sales PWA)",
+                icon: ShoppingBag,
+                onClick: () => router.push("/sales"),
+              },
+              {
+                label: "Bàn điều phối Kanban",
+                icon: Layers,
+                onClick: () => router.push("/don-hang"),
+              },
+              {
+                label: "Quản lý khách hàng & nợ",
+                icon: Users,
+                onClick: () => router.push("/khach-hang"),
+              },
+              {
+                label: "Kho sản phẩm dầu nhớt",
+                icon: Boxes,
+                onClick: () => router.push("/san-pham"),
+              },
+              {
+                label: "Quản trị đội xe & chu kỳ",
+                icon: Truck,
+                onClick: () => router.push("/fleet"),
+              },
+              {
+                label: "Trạm tích điểm QR thợ",
+                icon: QrCode,
+                onClick: () => router.push("/tich-diem"),
+              },
+              {
+                label: "Quản lý vỏ phuy 200L",
+                icon: Package,
+                onClick: () => router.push("/vo-phuy"),
+              },
+              "separator",
+              {
+                label: "Tổng quan Dashboard & RFM",
+                icon: BarChart3,
+                onClick: () => router.push("/dashboard"),
+              },
+            ]}
+          />
+
           {offlineCount > 0 && (
             <button
               type="button"

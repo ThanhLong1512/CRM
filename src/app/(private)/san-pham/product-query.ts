@@ -6,6 +6,10 @@ export type ProductDto = {
   standard: string | null;
   volume: string | null;
   unitPrice: number;
+  wholesalePrice?: number | null;
+  garagePrice?: number | null;
+  retailPrice?: number | null;
+  volumeLiters?: number | null;
   stock: number;
   isDrum: boolean;
   createdAt?: string;

@@ -20,6 +20,8 @@ import {
   Layers,
   Sparkles,
 } from 'lucide-react';
+import { calculateVolumeDiscount, resolveTierPrice } from '@/lib/pricingEngine';
+import { getContainerLiters } from '@/lib/unitConverter';
 
 interface PwaOrderReviewDrawerProps {
   activeCustomer: Customer;
@@ -42,6 +44,7 @@ interface PwaOrderReviewDrawerProps {
     drumDepositAmount: number;
     signatureBase64?: string;
     isEmergencyApproved: boolean;
+    emergencyReason?: string;
     cashCollected?: number;
   }) => void;
   onCollectCashDebt: (customerId: string, amount: number) => void;
@@ -72,28 +75,26 @@ export default function PwaOrderReviewDrawer({
   const [showEmergencyModal, setShowEmergencyModal] = useState<boolean>(false);
   const [emergencyReason, setEmergencyReason] = useState<string>('Khách hàng VIP, đang thay nhớt cho 5 xe container tại bãi');
 
-  // Steel Drum handover state
+  // Steel Drum handover state: standard deposit 400,000 VND / drum
   const [drumDelivered, setDrumDelivered] = useState<number>(0);
   const [drumReturned, setDrumReturned] = useState<number>(0);
-  const DRUM_DEPOSIT_UNIT_PRICE = 300000; // 300,000 VND / steel drum
+  const DRUM_DEPOSIT_UNIT_PRICE = 400000; // 400,000 VND / steel drum
 
   // Digital Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [hasSignature, setHasSignature] = useState<boolean>(false);
 
-  // Derive cart items
+  // Derive cart items with 3-tier pricing
   const cartItems = useMemo(() => {
     return Object.entries(cart)
       .filter(([_, qty]) => qty > 0)
       .map(([prodId, qty]) => {
         const product = products.find((p) => p.id === prodId)!;
-        const unitPrice =
-          activeCustomer.type === 'Đội xe'
-            ? product.priceFleet
-            : activeCustomer.type === 'Thợ'
-            ? product.priceMechanic
-            : product.priceDealer;
+        const customerTier = activeCustomer.dealerTier ?? (
+          activeCustomer.type === 'Đội xe' ? 'RETAIL' : activeCustomer.type === 'Thợ' ? 'RETAIL' : 'SILVER'
+        );
+        const unitPrice = resolveTierPrice(product, customerTier);
         return {
           product,
           quantity: qty,
@@ -103,20 +104,29 @@ export default function PwaOrderReviewDrawer({
       });
   }, [cart, products, activeCustomer]);
 
-  // Volume / Liter calculation helper
-  const getVolLiters = (p: Product) => {
-    if (p.packageType === 'Phuy 200L') return 200;
-    if (p.packageType === 'Thùng 18L') return 18;
-    if (p.packageType === 'Xô 4L') return 4;
-    return 1;
-  };
-  const totalLiters = cartItems.reduce((sum, item) => sum + item.quantity * getVolLiters(item.product), 0);
+  // Volume discount calculation (≥5 pails -> 3%, ≥2 drums -> 5%, etc.)
+  const volumeDiscount = useMemo(() => {
+    const customerTier = activeCustomer.dealerTier ?? (
+      activeCustomer.type === 'Đội xe' ? 'RETAIL' : activeCustomer.type === 'Thợ' ? 'RETAIL' : 'SILVER'
+    );
+    return calculateVolumeDiscount(
+      cartItems.map((i) => ({ productId: i.product.id, product: i.product, quantity: i.quantity })),
+      customerTier,
+    );
+  }, [cartItems, activeCustomer]);
+
+  // Total volume in liters (Phuy 208L, Xô 18L, Can 4L, Chai 1L)
+  const totalLiters = cartItems.reduce((sum, item) => {
+    const unitLiters = item.product.volumeLiters || getContainerLiters(item.product.packageType);
+    return sum + item.quantity * unitLiters;
+  }, 0);
 
   // Auto detect if drum packaging is in order to set initial delivered drums
   useEffect(() => {
     let drumCount = 0;
     cartItems.forEach((item) => {
-      if (item.product.packageType === 'Phuy 200L') {
+      const pkg = item.product.packageType;
+      if (pkg === 'Phuy 208L' || pkg === 'Phuy 200L' || item.product.drumReturnable) {
         drumCount += item.quantity;
       }
     });
@@ -125,7 +135,8 @@ export default function PwaOrderReviewDrawer({
 
   // Financial calculations with discount
   const rawOrderTotal = cartItems.reduce((sum, item) => sum + item.subtotal, 0);
-  const discountAmount = Math.round((rawOrderTotal * discountPercent) / 100);
+  const effectiveDiscountPercent = Math.max(discountPercent, volumeDiscount.discountPercent);
+  const discountAmount = Math.round((rawOrderTotal * effectiveDiscountPercent) / 100);
   const netGoodsTotal = Math.max(0, rawOrderTotal - discountAmount);
   const netDrumChange = drumDelivered - drumReturned;
   const drumDepositTotal = netDrumChange * DRUM_DEPOSIT_UNIT_PRICE;
@@ -221,15 +232,16 @@ export default function PwaOrderReviewDrawer({
       customer: activeCustomer,
       items: cartItems,
       totalAmount: newOrderTotal,
-      discountPercent,
+      discountPercent: effectiveDiscountPercent,
       discountAmount,
-      promotionNotes: promotionNotes.trim() || undefined,
+      promotionNotes: [promotionNotes.trim(), ...volumeDiscount.badges].filter(Boolean).join(" | ") || undefined,
       totalLiters,
       drumDelivered,
       drumReturned,
       drumDepositAmount: drumDepositTotal,
       signatureBase64,
       isEmergencyApproved,
+      emergencyReason: isEmergencyApproved ? emergencyReason : undefined,
       cashCollected,
     });
   };
@@ -337,10 +349,10 @@ export default function PwaOrderReviewDrawer({
             <div className="flex items-center justify-between">
               <div className="text-sm font-black text-sky-950 flex items-center gap-2">
                 <Package className="w-5 h-5 text-sky-600" />
-                <span>Sổ Quản Lý Vỏ Phuy Sắt (200L)</span>
+                <span>Sổ Quản Lý Vỏ Phuy Sắt (208L Quốc Tế)</span>
               </div>
               <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-sky-200 text-sky-900 font-bold">
-                Cọc 300k/vỏ
+                Cọc 400k/vỏ
               </span>
             </div>
 
@@ -440,6 +452,20 @@ export default function PwaOrderReviewDrawer({
                 Sản lượng: {totalLiters} Lít
               </span>
             </div>
+
+            {volumeDiscount.badges.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-emerald-50 border border-emerald-200">
+                {volumeDiscount.badges.map((b: string, i: number) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-300"
+                  >
+                    <Sparkles className="w-3 h-3 text-emerald-600" />
+                    {b}
+                  </span>
+                ))}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -673,6 +699,8 @@ export default function PwaOrderReviewDrawer({
                 ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                 : isOffline
                 ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 active:scale-[0.98]'
+                : isOverCredit && isEmergencyApproved
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 active:scale-[0.98]'
                 : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 active:scale-[0.98]'
             }`}
           >
@@ -680,6 +708,11 @@ export default function PwaOrderReviewDrawer({
               <>
                 <CloudOff className="w-5 h-5 text-slate-950" />
                 <span>LƯU ĐƠN VÀO BỘ NHỚ TẠM THIẾT BỊ ({formatVND(newOrderTotal)})</span>
+              </>
+            ) : isOverCredit && isEmergencyApproved ? (
+              <>
+                <AlertOctagon className="w-5 h-5 text-slate-950" />
+                <span>GỬI ĐƠN CHỜ GĐ PHÊ DUYỆT BẢO LÃNH ({formatVND(newOrderTotal)})</span>
               </>
             ) : (
               <>
@@ -793,7 +826,7 @@ export default function PwaOrderReviewDrawer({
                 }}
                 className="h-10 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold shadow-md cursor-pointer"
               >
-                Mô Phỏng GĐ Duyệt Ngay
+                Xác Nhận Đơn Chờ GĐ Phê Duyệt
               </button>
             </div>
           </div>

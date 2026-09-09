@@ -34,6 +34,7 @@ import {
 import { exportOrdersReport } from '@/lib/exportUtils';
 import HungerAlertCard from './HungerAlertCard';
 import ZaloShareModal, { type ZaloTemplateType } from './ZaloShareModal';
+import { PageActionMenu } from '@/components/common/ActionMenu';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -119,22 +120,26 @@ export default function DashboardView({
   return (
     <div id="dashboard-view" className="w-full space-y-6">
       {/* 1. Top Executive Banner & Timeframe */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-500/20 shadow-xs">
               <BarChart3 className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">
-                  Bảng Chỉ Huy Giám Đốc Kinh Doanh (Executive Dashboard)
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-black tracking-tight text-slate-900">
+                  Bảng Chỉ Huy Giám Đốc Kinh Doanh
                 </h2>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-900 text-amber-400 font-bold font-mono">
+                <span className="hidden sm:inline text-xs font-semibold text-slate-400">
+                  (Executive Dashboard)
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full bg-slate-950 text-amber-400 font-bold font-mono shadow-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                   MTD {mtdYear}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 mt-1 line-clamp-1">
                 Giám sát doanh số dầu nhớt, sản lượng xuất kho quy đổi (Lít), thu hồi vỏ phuy và an toàn công nợ B2B
               </p>
             </div>
@@ -142,45 +147,46 @@ export default function DashboardView({
         </div>
 
         {/* Quick Actions */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
+          <PageActionMenu
+            label="Thao tác"
+            items={[
+              {
+                label: "Xuất Excel Đơn Hàng & Doanh Số",
+                icon: FileSpreadsheet,
+                onClick: () => exportOrdersReport(orders),
+              },
+              {
+                label: "Điều Phối Đơn Hàng Kanban",
+                icon: Layers,
+                onClick: () => onNavigate('kanban'),
+              },
+            ]}
+          />
           <button
             type="button"
-            onClick={() => exportOrdersReport(orders)}
-            className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 active:scale-95 text-emerald-800 font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer font-mono"
-            title="Xuất danh sách đơn hàng & sản lượng Lít ra file Excel CSV"
+            onClick={() => onNavigate('sales_pwa')}
+            className="h-8 sm:h-9 px-3 sm:px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs shadow-xs border border-amber-600/30 flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Mở bản đồ tuyến Sales & Check-in GPS"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
-            <span>Xuất Excel Đơn Hàng</span>
-          </button>
-          <button
-            onClick={() => onNavigate('sales-pwa')}
-            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer font-mono"
-          >
-            <Truck className="w-4 h-4" />
+            <Truck className="size-3.5 sm:size-4 text-slate-950 shrink-0" />
             <span>Tuyến Sales GPS</span>
-          </button>
-          <button
-            onClick={() => onNavigate('kanban')}
-            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer font-mono"
-          >
-            <Layers className="w-4 h-4 text-amber-400" />
-            <span>Điều Phối Đơn Hàng</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Top 4 Executive KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 2. Top 4 Executive KPI Cards (2x2 on Mobile, 4-col on Desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* KPI 1: Revenue MTD */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Doanh Số Tháng Này (MTD)</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4" />
+            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider truncate">Doanh Số MTD</span>
+            <div className="size-7 sm:size-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <TrendingUp className="size-3.5 sm:size-4" />
             </div>
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black font-mono text-slate-900">
+          <div className="mt-2 sm:mt-3">
+            <div className="text-base sm:text-2xl font-black font-mono text-slate-900 truncate">
               {formatVND(kpis.revenueMtd)}
             </div>
             {mom != null ? (
@@ -208,46 +214,41 @@ export default function DashboardView({
         </div>
 
         {/* KPI 2: Liters Shipped */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Sản Lượng Xuất Kho</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Droplets className="w-4 h-4" />
+            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider truncate">Sản Lượng Lít</span>
+            <div className="size-7 sm:size-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <Droplets className="size-3.5 sm:size-4" />
             </div>
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black font-mono text-amber-600">
+          <div className="mt-2 sm:mt-3">
+            <div className="text-base sm:text-2xl font-black font-mono text-amber-600 truncate">
               {kpis.litersMtd.toLocaleString('vi-VN')}{' '}
-              <span className="text-sm font-semibold text-slate-500">Lít</span>
+              <span className="text-xs font-semibold text-slate-500">L</span>
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Tương đương ~{' '}
+            <div className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
+              ~{' '}
               <strong>
                 {phuyEquiv.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} Phuy
-                200L
               </strong>
             </div>
           </div>
         </div>
 
         {/* KPI 3: Drum Return Rate */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tỷ Lệ Thu Hồi Vỏ Phuy</span>
-            <div className="w-8 h-8 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center">
-              <Package className="w-4 h-4" />
+            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider truncate">Thu Hồi Vỏ</span>
+            <div className="size-7 sm:size-8 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center shrink-0">
+              <Package className="size-3.5 sm:size-4" />
             </div>
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black font-mono text-cyan-700">
+          <div className="mt-2 sm:mt-3">
+            <div className="text-base sm:text-2xl font-black font-mono text-cyan-700">
               {drumReturnRate}%
             </div>
-            <div className="text-[11px] text-cyan-800 font-medium mt-1">
-              Còn{' '}
-              <strong>
-                {drumStats.totalOutstanding.toLocaleString('vi-VN')} vỏ ngoài thị
-                trường
-              </strong>
+            <div className="text-[10px] sm:text-[11px] text-cyan-800 font-medium mt-0.5 truncate">
+              Ngoài TT: <strong>{drumStats.totalOutstanding.toLocaleString('vi-VN')} vỏ</strong>
             </div>
           </div>
         </div>

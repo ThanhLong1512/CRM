@@ -14,9 +14,9 @@ import {
   Calendar,
   X,
   ShieldAlert,
-  Fuel,
   Trash2,
 } from 'lucide-react';
+import { ActionMenu } from '@/components/common/ActionMenu';
 
 interface FleetViewProps {
   vehicles: FleetVehicle[];
@@ -133,8 +133,41 @@ export default function FleetView({
         </button>
       </div>
 
-      {/* 2. Top 3 Status Severity Health Blocks */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* 2A. Mobile Compact 3-Severity Strip (< md) */}
+      <div className="grid grid-cols-3 gap-2 md:hidden">
+        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-center">
+          <div className="text-[10px] font-bold text-rose-800 uppercase flex items-center justify-center gap-1">
+            <span>🚨</span>
+            <span className="truncate">Quá hạn</span>
+          </div>
+          <div className="text-xl font-black font-mono text-rose-700 mt-0.5">
+            {redVehicles.length}
+          </div>
+        </div>
+
+        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-center">
+          <div className="text-[10px] font-bold text-amber-800 uppercase flex items-center justify-center gap-1">
+            <span>⚠️</span>
+            <span className="truncate">Cảnh báo</span>
+          </div>
+          <div className="text-xl font-black font-mono text-amber-800 mt-0.5">
+            {yellowVehicles.length}
+          </div>
+        </div>
+
+        <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+          <div className="text-[10px] font-bold text-emerald-800 uppercase flex items-center justify-center gap-1">
+            <span>✅</span>
+            <span className="truncate">An toàn</span>
+          </div>
+          <div className="text-xl font-black font-mono text-emerald-800 mt-0.5">
+            {greenVehicles.length}
+          </div>
+        </div>
+      </div>
+
+      {/* 2B. Top 3 Status Severity Health Blocks (Desktop >= md) */}
+      <div className="hidden md:grid grid-cols-3 gap-4">
         {/* RED BLOCK */}
         <div className="p-5 rounded-2xl bg-rose-50 border border-rose-200 shadow-xs flex items-center justify-between">
           <div>
@@ -292,8 +325,8 @@ export default function FleetView({
                   </div>
                 </div>
 
-                {/* Gợi Ý Loại Nhớt Phù Hợp Đóng Đinh Dưới Biển Số */}
-                <div className="mt-3 p-3 rounded-xl bg-blue-50/70 border border-blue-200/80 flex items-start gap-2 text-xs">
+                {/* Gợi Ý Loại Nhớt Phù Hợp Đóng Đinh Dưới Biển Số (Hidden on mobile) */}
+                <div className="hidden sm:flex mt-3 p-3 rounded-xl bg-blue-50/70 border border-blue-200/80 items-start gap-2 text-xs">
                   <Droplets className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                   <div>
                     <span className="text-[10px] uppercase font-bold text-blue-700 tracking-wide block">
@@ -307,35 +340,39 @@ export default function FleetView({
               </div>
 
               {/* Card Footer Actions */}
-              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => handleStartEdit(v)}
-                    className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Edit2 className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Cập Nhật Km</span>
-                  </button>
-                  {onDeleteVehicle && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Xóa đầu xe ${v.plate}? Hành động không hoàn tác.`,
-                          )
-                        ) {
-                          onDeleteVehicle(v.id);
-                        }
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                      title="Xóa đầu xe"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Xóa</span>
-                    </button>
-                  )}
-                </div>
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <ActionMenu
+                  label="Thao tác"
+                  variant="outline"
+                  align="start"
+                  size="default"
+                  items={[
+                    {
+                      label: "Cập nhật số Km (Odometer)",
+                      icon: Edit2,
+                      onClick: () => handleStartEdit(v),
+                    },
+                    ...(onDeleteVehicle
+                      ? [
+                          "separator" as const,
+                          {
+                            label: "Xóa đầu xe",
+                            icon: Trash2,
+                            variant: "destructive" as const,
+                            onClick: () => {
+                              if (
+                                window.confirm(
+                                  `Xóa đầu xe ${v.plate}? Hành động không hoàn tác.`,
+                                )
+                              ) {
+                                onDeleteVehicle(v.id);
+                              }
+                            },
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
 
                 {isOverdue ? (
                   <button
@@ -346,27 +383,27 @@ export default function FleetView({
                         onNavigateToSales(v.customerId);
                       }
                     }}
-                    className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer animate-pulse"
+                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-xl bg-rose-600 px-3.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-rose-700 animate-pulse"
                     title="Tự động tạo đơn hàng khẩn cấp đẩy vào cột Chờ Duyệt bên Kanban"
                   >
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>Tạo Đơn Nhớt Gấp (Auto Kanban)</span>
+                    <AlertTriangle className="size-3.5" />
+                    <span>Tạo Đơn Nhớt Gấp</span>
                   </button>
                 ) : isWarning ? (
                   <button
                     onClick={() => onNavigateToSales(v.customerId)}
-                    className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 text-xs font-bold text-slate-950 shadow-2xs transition-colors hover:bg-amber-600"
                   >
                     <span>Lên Đơn Cảnh Báo</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <ArrowRight className="size-3.5" />
                   </button>
                 ) : (
                   <button
                     onClick={() => onNavigateToSales(v.customerId)}
-                    className="px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-xl bg-slate-100 px-3.5 text-xs font-bold text-slate-800 shadow-2xs transition-colors hover:bg-slate-200"
                   >
                     <span>Lên Đơn Định Kỳ</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <ArrowRight className="size-3.5" />
                   </button>
                 )}
               </div>

@@ -9,7 +9,15 @@ export async function listOrders(): Promise<OrderDto[]> {
       user: { select: { name: true, email: true } },
       items: {
         include: {
-          product: { select: { id: true, name: true, sku: true } },
+          product: {
+            select: {
+              id: true,
+              name: true,
+              sku: true,
+              volume: true,
+              viscosity: true,
+            },
+          },
         },
       },
     },
@@ -26,6 +34,8 @@ export async function listOrders(): Promise<OrderDto[]> {
         quantity: item.quantity,
         unitPrice,
         lineTotal: unitPrice * item.quantity,
+        volume: item.product.volume,
+        viscosity: item.product.viscosity,
       };
     });
 
@@ -51,6 +61,13 @@ export async function listOrders(): Promise<OrderDto[]> {
       discountAmount: Number(order.discountAmount),
       promotionNotes: order.promotionNotes,
       totalLiters: order.totalLiters,
+      drumDelivered: order.drumDelivered,
+      drumReturned: order.drumReturned,
+      drumDepositAmount: order.drumDepositAmount != null ? Number(order.drumDepositAmount) : 0,
+      isCreditOverride: order.isCreditOverride,
+      creditOverrideReason: order.creditOverrideReason,
+      creditOverrideStatus: order.creditOverrideStatus as OrderDto["creditOverrideStatus"],
+      creditOverrideApprovedBy: order.creditOverrideApprovedBy,
       itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
       items,
       createdAt: order.createdAt.toISOString(),

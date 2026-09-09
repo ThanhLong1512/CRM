@@ -3,6 +3,7 @@ export type OrderStatusDto =
   | "PENDING"
   | "CONFIRMED"
   | "SHIPPED"
+  | "DELIVERED"
   | "CANCELLED";
 
 export type OrderItemDto = {
@@ -13,6 +14,8 @@ export type OrderItemDto = {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  volume?: string | null;
+  viscosity?: string | null;
 };
 
 export type OrderDto = {
@@ -29,6 +32,13 @@ export type OrderDto = {
   discountAmount?: number;
   promotionNotes?: string | null;
   totalLiters?: number;
+  drumDelivered?: number;
+  drumReturned?: number;
+  drumDepositAmount?: number;
+  isCreditOverride?: boolean;
+  creditOverrideReason?: string | null;
+  creditOverrideStatus?: "PENDING" | "APPROVED" | "REJECTED" | null;
+  creditOverrideApprovedBy?: string | null;
   itemCount: number;
   items: OrderItemDto[];
   createdAt: string;

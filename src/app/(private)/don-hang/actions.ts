@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { OrderStatus, Prisma } from "@prisma/client";
+import { OrderStatus, Prisma, DealerTier } from "@prisma/client";
 import { getSessionDbUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getLitersFromVolume } from "@/lib/unitConverter";
+import { resolveTierUnitPrice, calculateVolumeDiscount, type CustomerDealerTier } from "@/lib/pricingEngine";
 
 export type OrderActionResult = {
   success: boolean;
@@ -20,6 +22,7 @@ const KANBAN_STATUSES: OrderStatus[] = [
   OrderStatus.PENDING,
   OrderStatus.CONFIRMED,
   OrderStatus.SHIPPED,
+  OrderStatus.DELIVERED,
 ];
 
 function fail(message: string): OrderActionResult {
@@ -44,16 +47,7 @@ function revalidateOrderPaths() {
   revalidatePath("/khach-hang");
   revalidatePath("/san-pham");
   revalidatePath("/dashboard");
-}
-
-function getProductLiters(product: { volume?: string | null; isDrum?: boolean }): number {
-  if (product.isDrum) return 200;
-  const vol = String(product.volume || "").toLowerCase();
-  const num = parseFloat(vol.replace(/[^\d.]/g, ""));
-  if (Number.isFinite(num) && num > 0) {
-    return num;
-  }
-  return 1;
+  revalidatePath("/vo-phuy");
 }
 
 export async function createOrder(input: {
@@ -63,6 +57,13 @@ export async function createOrder(input: {
   discountPercent?: number;
   discountAmount?: number;
   promotionNotes?: string | null;
+  drumDelivered?: number;
+  drumReturned?: number;
+  drumDepositUnitPrice?: number;
+  isCreditOverride?: boolean;
+  creditOverrideReason?: string;
+  signature?: string;
+  signedBy?: string;
 }): Promise<OrderActionResult> {
   const { dbUser } = await getSessionDbUser();
   if (!dbUser) {
@@ -121,6 +122,13 @@ export async function createOrder(input: {
         throw new Error("Một hoặc nhiều sản phẩm không tồn tại.");
       }
 
+      const customerTier: CustomerDealerTier =
+        customer.dealerTier === "GOLD"
+          ? "GOLD"
+          : customer.dealerTier === "RETAIL"
+          ? "RETAIL"
+          : "SILVER";
+
       let totalLiters = 0;
       const lineItems = products.map((product) => {
         const quantity = qtyByProduct.get(product.id) ?? 0;
@@ -129,34 +137,85 @@ export async function createOrder(input: {
             `Không đủ tồn kho cho “${product.name}” (còn ${product.stock}).`,
           );
         }
-        const unitLiters = getProductLiters(product);
+        // Standard Industrial volume calculation: Drum = 208L, Pail = 18L, Can = 4L, Bottle = 1L
+        const unitLiters = getLitersFromVolume(product.volume, product.isDrum);
         totalLiters += unitLiters * quantity;
+
+        const tierPrice = resolveTierUnitPrice(
+          {
+            id: product.id,
+            unitPrice: Number(product.unitPrice),
+            wholesalePrice: product.wholesalePrice ? Number(product.wholesalePrice) : null,
+            garagePrice: product.garagePrice ? Number(product.garagePrice) : null,
+            retailPrice: product.retailPrice ? Number(product.retailPrice) : null,
+            volume: product.volume,
+            isDrum: product.isDrum,
+          },
+          customerTier
+        );
+
         return {
           productId: product.id,
+          product,
           quantity,
-          unitPrice: product.unitPrice,
+          unitPrice: new Prisma.Decimal(tierPrice),
           unitLiters,
         };
       });
 
-      const rawTotal = orderTotal(lineItems);
-      const discountPercent = Math.max(0, Math.min(100, Number(input.discountPercent || 0)));
-      let discountAmount = Math.max(0, Number(input.discountAmount || 0));
-      if (discountAmount === 0 && discountPercent > 0) {
-        discountAmount = Math.round((rawTotal * discountPercent) / 100);
-      }
-      const finalTotal = Math.max(0, rawTotal - discountAmount);
+      // Volume discount calculation
+      const pricingResult = calculateVolumeDiscount(
+        lineItems.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          product: {
+            id: item.product.id,
+            unitPrice: Number(item.product.unitPrice),
+            wholesalePrice: item.product.wholesalePrice ? Number(item.product.wholesalePrice) : null,
+            garagePrice: item.product.garagePrice ? Number(item.product.garagePrice) : null,
+            retailPrice: item.product.retailPrice ? Number(item.product.retailPrice) : null,
+            volume: item.product.volume,
+            isDrum: item.product.isDrum,
+          },
+        })),
+        customerTier,
+        Number(input.discountPercent || 0)
+      );
+
+      const netGoodsTotal = pricingResult.netTotal;
+      const discountAmount = pricingResult.discountAmount;
+      const discountPercent = pricingResult.discountPercent;
+
+      // Drum Deposit & Exchange calculations
+      const drumDelivered = Math.max(0, Number(input.drumDelivered || 0));
+      const drumReturned = Math.max(0, Number(input.drumReturned || 0));
+      const depositUnitPrice = Math.max(0, Number(input.drumDepositUnitPrice || 400000));
+      const netDrumChange = drumDelivered - drumReturned;
+      const drumDepositTotal = netDrumChange * depositUnitPrice;
+
+      // Net order payable: Oil products + Net drum deposit (deducts if more empty drums returned)
+      const finalTotal = Math.max(0, netGoodsTotal + drumDepositTotal);
 
       const currentDebt = Number(customer.currentDebt);
       const creditLimit = Number(customer.creditLimit);
+      const isOverLimit = currentDebt + finalTotal > creditLimit;
 
-      if (currentDebt + finalTotal > creditLimit) {
-        throw new Error(
-          `Vượt hạn mức công nợ. Dư nợ ${currentDebt.toLocaleString("vi-VN")} + đơn ${finalTotal.toLocaleString("vi-VN")} > hạn mức ${creditLimit.toLocaleString("vi-VN")}.`,
-        );
+      let isCreditOverride = Boolean(input.isCreditOverride);
+      let creditOverrideReason = input.creditOverrideReason ? String(input.creditOverrideReason).trim() : null;
+      let creditOverrideStatus = "NONE";
+
+      if (isOverLimit) {
+        if (!isCreditOverride && !creditOverrideReason) {
+          throw new Error(
+            `Vượt hạn mức công nợ. Dư nợ ${currentDebt.toLocaleString("vi-VN")} đ + đơn ${finalTotal.toLocaleString("vi-VN")} đ > hạn mức ${creditLimit.toLocaleString("vi-VN")} đ. Vui lòng gửi lý do bảo lãnh duyệt vượt trần.`,
+          );
+        }
+        isCreditOverride = true;
+        creditOverrideStatus = "PENDING";
       }
 
-      await tx.order.create({
+      // 1. Create the Order in DB
+      const order = await tx.order.create({
         data: {
           status: OrderStatus.PENDING,
           userId: dbUser.id,
@@ -164,8 +223,16 @@ export async function createOrder(input: {
           localId,
           discountPercent,
           discountAmount: new Prisma.Decimal(discountAmount),
-          promotionNotes: input.promotionNotes ? String(input.promotionNotes).trim() : null,
+          promotionNotes: input.promotionNotes
+            ? String(input.promotionNotes).trim()
+            : pricingResult.appliedRules.join(" | ") || null,
           totalLiters,
+          drumDelivered,
+          drumReturned,
+          drumDepositAmount: new Prisma.Decimal(drumDepositTotal),
+          isCreditOverride,
+          creditOverrideReason,
+          creditOverrideStatus,
           syncedAt: localId ? new Date() : null,
           items: {
             create: lineItems.map((item) => ({
@@ -177,13 +244,53 @@ export async function createOrder(input: {
         },
       });
 
+      // 2. Automatically log Drum Transactions (ISSUE / RETURN)
+      if (drumDelivered > 0) {
+        await tx.drumTransaction.create({
+          data: {
+            customerId,
+            orderId: order.id,
+            type: "ISSUE",
+            quantity: drumDelivered,
+            userId: dbUser.id,
+            signature: input.signature || null,
+            signedBy: input.signedBy || null,
+            notes: `Giao kèm đơn hàng #${order.id.slice(-6).toUpperCase()}`,
+          },
+        });
+      }
+      if (drumReturned > 0) {
+        await tx.drumTransaction.create({
+          data: {
+            customerId,
+            orderId: order.id,
+            type: "RETURN",
+            quantity: drumReturned,
+            depositDeducted: new Prisma.Decimal(drumReturned * depositUnitPrice),
+            userId: dbUser.id,
+            signature: input.signature || null,
+            signedBy: input.signedBy || null,
+            notes: `Thu hồi cấn trừ cọc kèm đơn hàng #${order.id.slice(-6).toUpperCase()}`,
+          },
+        });
+      }
+
+      // 3. Update Customer outstanding drums & current debt
+      const newOutstandingDrums = Math.max(0, customer.outstandingDrums + netDrumChange);
+      // If credit override is PENDING, do not increment customer debt until approved by Director!
+      const newDebt = creditOverrideStatus === "PENDING"
+        ? currentDebt
+        : currentDebt + finalTotal;
+
       await tx.customer.update({
         where: { id: customerId },
         data: {
-          currentDebt: new Prisma.Decimal(currentDebt + finalTotal),
+          outstandingDrums: newOutstandingDrums,
+          currentDebt: new Prisma.Decimal(newDebt),
         },
       });
 
+      // 4. Decrement product stock
       for (const item of lineItems) {
         await tx.product.update({
           where: { id: item.productId },
@@ -203,6 +310,8 @@ export async function createOrder(input: {
   return ok(
     localId
       ? "Đã đồng bộ đơn offline thành công."
+      : input.isCreditOverride
+      ? "Đơn hàng vượt hạn mức đã lưu và gửi Ban Giám Đốc phê duyệt khẩn cấp."
       : "Đã tạo đơn hàng thành công.",
   );
 }
@@ -236,7 +345,7 @@ export async function updateOrderStatus(
       !KANBAN_STATUSES.includes(order.status) ||
       !KANBAN_STATUSES.includes(nextStatus)
     ) {
-      return fail("Chỉ được chuyển giữa Chờ duyệt, Xuất kho và Đã giao.");
+      return fail("Chỉ được chuyển giữa Chờ duyệt, Xuất kho, Giao hàng và Hoàn thành.");
     }
 
     if (order.status === nextStatus) {
@@ -320,3 +429,129 @@ export async function cancelOrder(orderId: string): Promise<OrderActionResult> {
   revalidateOrderPaths();
   return ok("Đã hủy đơn hàng và hoàn dư nợ / tồn kho.");
 }
+
+/**
+ * Ban Giám Đốc (ADMIN) phê duyệt đơn hàng bảo lãnh vượt hạn mức công nợ
+ */
+export async function approveCreditOverride(orderId: string): Promise<OrderActionResult> {
+  if (!orderId) {
+    return fail("Thiếu mã đơn hàng.");
+  }
+
+  const { dbUser } = await getSessionDbUser();
+  if (!dbUser) {
+    return fail("Bạn cần đăng nhập để phê duyệt.");
+  }
+  if (dbUser.role !== "ADMIN") {
+    return fail("Chỉ Ban Giám Đốc (ADMIN) mới có quyền phê duyệt bảo lãnh vượt trần.");
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: { items: true, customer: true },
+      });
+      if (!order) {
+        throw new Error("Không tìm thấy đơn hàng.");
+      }
+      if (order.creditOverrideStatus !== "PENDING") {
+        throw new Error("Đơn hàng không ở trạng thái chờ duyệt bảo lãnh.");
+      }
+
+      const rawTotal = orderTotal(order.items);
+      const netPayable = Math.max(
+        0,
+        rawTotal - Number(order.discountAmount) + Number(order.drumDepositAmount),
+      );
+
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: OrderStatus.CONFIRMED,
+          creditOverrideStatus: "APPROVED",
+          creditOverrideApprovedBy: dbUser.name || dbUser.email,
+        },
+      });
+
+      await tx.customer.update({
+        where: { id: order.customerId },
+        data: {
+          currentDebt: { increment: netPayable },
+          creditOverridden: true,
+          creditOverrideApprovedBy: dbUser.name || dbUser.email,
+        },
+      });
+    });
+  } catch (error) {
+    return fail(
+      error instanceof Error
+        ? error.message
+        : "Không thể phê duyệt đơn bảo lãnh. Vui lòng thử lại.",
+    );
+  }
+
+  revalidateOrderPaths();
+  return ok("Ban Giám Đốc đã phê duyệt bảo lãnh thành công! Đơn hàng đã được chuyển sang Xuất kho.");
+}
+
+/**
+ * Ban Giám Đốc từ chối đơn hàng vượt hạn mức công nợ
+ */
+export async function rejectCreditOverride(
+  orderId: string,
+  reason?: string,
+): Promise<OrderActionResult> {
+  if (!orderId) {
+    return fail("Thiếu mã đơn hàng.");
+  }
+
+  const { dbUser } = await getSessionDbUser();
+  if (!dbUser) {
+    return fail("Bạn cần đăng nhập.");
+  }
+  if (dbUser.role !== "ADMIN") {
+    return fail("Chỉ Ban Giám Đốc mới có quyền từ chối bảo lãnh.");
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: { items: true },
+      });
+      if (!order) {
+        throw new Error("Không tìm thấy đơn hàng.");
+      }
+
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: OrderStatus.CANCELLED,
+          creditOverrideStatus: "REJECTED",
+          promotionNotes: reason
+            ? `GĐ Từ chối bảo lãnh: ${reason}`
+            : "Ban Giám Đốc từ chối bảo lãnh công nợ",
+        },
+      });
+
+      // Restore product stock
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+    });
+  } catch (error) {
+    return fail(
+      error instanceof Error
+        ? error.message
+        : "Không thể từ chối đơn bảo lãnh.",
+    );
+  }
+
+  revalidateOrderPaths();
+  return ok("Đã từ chối đơn hàng vượt trần và hoàn trả tồn kho sản phẩm.");
+}
+

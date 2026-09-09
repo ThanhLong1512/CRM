@@ -1,4 +1,3 @@
-import { cache } from "react";
 import { listCustomers } from "@/lib/data/customers";
 import {
   getDashboardOverview,
@@ -50,26 +49,22 @@ export type RemixBootstrap = {
   staffUsers: RemixStaffUser[];
 };
 
-export const loadRemixBootstrap = cache(async (): Promise<RemixBootstrap> => {
-  const [
-    productDtos,
-    customerDtos,
-    orderDtos,
-    fleetDtos,
-    drumTxns,
-    dashboard,
-    drumStats,
-    rfm,
-    users,
-  ] = await Promise.all([
-    listProducts(),
+const fetchRemixBootstrap = async (): Promise<RemixBootstrap> => {
+  // Batch 1: Customers & Products (2 queries)
+  const [customerDtos, productDtos] = await Promise.all([
     listCustomers(),
+    listProducts(),
+  ]);
+
+  // Batch 2: Orders, Fleet, Drum Transactions (3 queries)
+  const [orderDtos, fleetDtos, drumTxns] = await Promise.all([
     listOrders(),
     listFleetVehicles(),
     listDrumTransactions(),
-    getDashboardOverview(),
-    getDrumStats(),
-    listRfmSegments(),
+  ]);
+
+  // Batch 3: Staff Users & Drum Stats (pass customerDtos to eliminate customer.aggregate) (2 queries)
+  const [users, drumStats] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
       select: {
@@ -80,7 +75,12 @@ export const loadRemixBootstrap = cache(async (): Promise<RemixBootstrap> => {
         createdAt: true,
       },
     }),
+    getDrumStats(customerDtos),
   ]);
+
+  // Step 4: Pure In-Memory calculations for Dashboard & RFM (0 DB queries!)
+  const dashboard = await getDashboardOverview(customerDtos, orderDtos);
+  const rfm = await listRfmSegments(orderDtos, customerDtos);
 
   return {
     products: productDtos.map(mapProductDto),
@@ -99,4 +99,8 @@ export const loadRemixBootstrap = cache(async (): Promise<RemixBootstrap> => {
       createdAt: u.createdAt.toISOString(),
     })),
   };
-});
+};
+
+export const loadRemixBootstrap = async (): Promise<RemixBootstrap> => {
+  return fetchRemixBootstrap();
+};

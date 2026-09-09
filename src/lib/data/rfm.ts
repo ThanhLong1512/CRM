@@ -43,33 +43,17 @@ function orderRevenue(
   );
 }
 
-export async function listRfmSegments(): Promise<RfmOverview> {
+import type { CustomerDto } from "@/app/(private)/khach-hang/customer-query";
+import type { OrderDto } from "@/app/(private)/don-hang/order-query";
+
+export async function listRfmSegments(
+  prefetchedOrders?: OrderDto[],
+  prefetchedCustomers?: CustomerDto[],
+): Promise<RfmOverview> {
   const now = new Date();
   const windowStart = new Date(
     now.getTime() - RFM_WINDOW_DAYS * MS_PER_DAY,
   );
-
-  const orders = await prisma.order.findMany({
-    where: {
-      status: { in: SOLD_STATUSES },
-      createdAt: { gte: windowStart },
-    },
-    select: {
-      customerId: true,
-      createdAt: true,
-      customer: {
-        select: {
-          id: true,
-          name: true,
-          type: true,
-          address: true,
-          currentDebt: true,
-          creditLimit: true,
-        },
-      },
-      items: { select: { quantity: true, unitPrice: true } },
-    },
-  });
 
   type Acc = {
     customerId: string;
@@ -85,26 +69,83 @@ export async function listRfmSegments(): Promise<RfmOverview> {
 
   const byCustomer = new Map<string, Acc>();
 
-  for (const order of orders) {
-    const existing = byCustomer.get(order.customerId);
-    const revenue = orderRevenue(order.items);
-    if (!existing) {
-      byCustomer.set(order.customerId, {
-        customerId: order.customer.id,
-        customerName: order.customer.name,
-        customerType: order.customer.type,
-        address: order.customer.address,
-        currentDebt: Number(order.customer.currentDebt),
-        creditLimit: Number(order.customer.creditLimit),
-        lastOrderAt: order.createdAt,
-        frequency: 1,
-        monetary: revenue,
-      });
-    } else {
-      existing.frequency += 1;
-      existing.monetary += revenue;
-      if (order.createdAt > existing.lastOrderAt) {
-        existing.lastOrderAt = order.createdAt;
+  if (prefetchedOrders && prefetchedCustomers) {
+    const custMap = new Map(prefetchedCustomers.map((c) => [c.id, c]));
+    for (const order of prefetchedOrders) {
+      if (!SOLD_STATUSES.includes(order.status as OrderStatus)) continue;
+      const orderDate = new Date(order.createdAt);
+      if (orderDate < windowStart) continue;
+
+      const cust = custMap.get(order.customerId);
+      if (!cust) continue;
+
+      const existing = byCustomer.get(order.customerId);
+      const revenue = order.total || order.items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
+
+      if (!existing) {
+        byCustomer.set(order.customerId, {
+          customerId: cust.id,
+          customerName: cust.name,
+          customerType: cust.type,
+          address: cust.address,
+          currentDebt: Number(cust.currentDebt),
+          creditLimit: Number(cust.creditLimit),
+          lastOrderAt: orderDate,
+          frequency: 1,
+          monetary: revenue,
+        });
+      } else {
+        existing.frequency += 1;
+        existing.monetary += revenue;
+        if (orderDate > existing.lastOrderAt) {
+          existing.lastOrderAt = orderDate;
+        }
+      }
+    }
+  } else {
+    const orders = await prisma.order.findMany({
+      where: {
+        status: { in: SOLD_STATUSES },
+        createdAt: { gte: windowStart },
+      },
+      select: {
+        customerId: true,
+        createdAt: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            address: true,
+            currentDebt: true,
+            creditLimit: true,
+          },
+        },
+        items: { select: { quantity: true, unitPrice: true } },
+      },
+    });
+
+    for (const order of orders) {
+      const existing = byCustomer.get(order.customerId);
+      const revenue = orderRevenue(order.items);
+      if (!existing) {
+        byCustomer.set(order.customerId, {
+          customerId: order.customer.id,
+          customerName: order.customer.name,
+          customerType: order.customer.type,
+          address: order.customer.address,
+          currentDebt: Number(order.customer.currentDebt),
+          creditLimit: Number(order.customer.creditLimit),
+          lastOrderAt: order.createdAt,
+          frequency: 1,
+          monetary: revenue,
+        });
+      } else {
+        existing.frequency += 1;
+        existing.monetary += revenue;
+        if (order.createdAt > existing.lastOrderAt) {
+          existing.lastOrderAt = order.createdAt;
+        }
       }
     }
   }

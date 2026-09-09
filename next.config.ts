@@ -16,6 +16,7 @@ import type { NextConfig } from "next";
  */
 const nextConfig: NextConfig = {
   devIndicators: false,
+  // reload trigger: 2026-09-09
 };
 
 export default nextConfig;

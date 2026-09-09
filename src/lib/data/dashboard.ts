@@ -2,7 +2,12 @@ import type { OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calculateDebtAging } from "@/lib/data/customers";
 
-const REVENUE_STATUSES: OrderStatus[] = ["PENDING", "CONFIRMED", "SHIPPED"];
+const REVENUE_STATUSES: OrderStatus[] = [
+  "PENDING",
+  "CONFIRMED",
+  "SHIPPED",
+  "DELIVERED",
+];
 const CREDIT_ALERT_RATIO = 0.85;
 
 const VISCOSITY_PALETTE = [
@@ -123,74 +128,92 @@ function toTrieu(vnd: number): number {
   return Math.round((vnd / 1_000_000) * 10) / 10;
 }
 
-export async function getDashboardOverview(): Promise<DashboardOverview> {
+import type { CustomerDto } from "@/app/(private)/khach-hang/customer-query";
+import type { OrderDto } from "@/app/(private)/don-hang/order-query";
+
+export async function getDashboardOverview(
+  prefetchedCustomers?: CustomerDto[],
+  prefetchedOrders?: OrderDto[],
+): Promise<DashboardOverview> {
   const now = new Date();
   const mtdStart = startOfMonth(now);
   const prevStart = addMonths(mtdStart, -1);
   const seriesStart = addMonths(mtdStart, -5);
 
-  const itemSelect = {
-    quantity: true,
-    unitPrice: true,
-    product: { select: { volume: true, viscosity: true } },
-  } as const;
+  let seriesOrders: {
+    status: OrderStatus;
+    createdAt: Date;
+    items: OrderItemWithProduct[];
+  }[];
 
-  const [mtdOrders, prevOrders, seriesOrders, shippedSeries, customers] =
-    await Promise.all([
-      prisma.order.findMany({
-        where: {
-          status: { in: REVENUE_STATUSES },
-          createdAt: { gte: mtdStart },
-        },
-        select: { items: { select: itemSelect } },
-      }),
-      prisma.order.findMany({
-        where: {
-          status: { in: REVENUE_STATUSES },
-          createdAt: { gte: prevStart, lt: mtdStart },
-        },
-        select: { items: { select: itemSelect } },
-      }),
+  let customersFromDb = null;
+
+  if (prefetchedOrders) {
+    seriesOrders = prefetchedOrders
+      .filter((o) => REVENUE_STATUSES.includes(o.status as OrderStatus))
+      .map((o) => ({
+        status: o.status as OrderStatus,
+        createdAt: new Date(o.createdAt),
+        items: o.items.map((it) => ({
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          product: {
+            volume: it.volume ?? null,
+            viscosity: it.viscosity ?? null,
+          },
+        })),
+      }))
+      .filter((o) => o.createdAt >= seriesStart);
+  } else {
+    const itemSelect = {
+      quantity: true,
+      unitPrice: true,
+      product: { select: { volume: true, viscosity: true } },
+    } as const;
+
+    const [ordersResult, custResult] = await Promise.all([
       prisma.order.findMany({
         where: {
           status: { in: REVENUE_STATUSES },
           createdAt: { gte: seriesStart },
         },
         select: {
+          status: true,
           createdAt: true,
           items: { select: itemSelect },
         },
       }),
-      prisma.order.findMany({
-        where: {
-          status: "SHIPPED",
-          createdAt: { gte: seriesStart },
-        },
-        select: {
-          createdAt: true,
-          items: { select: { quantity: true, unitPrice: true } },
-        },
-      }),
-      prisma.customer.findMany({
-        select: {
-          id: true,
-          name: true,
-          currentDebt: true,
-          creditLimit: true,
-          creditTermDays: true,
-          orders: {
-            where: { status: { in: REVENUE_STATUSES } },
-            orderBy: { createdAt: "desc" },
+      prefetchedCustomers
+        ? Promise.resolve(null)
+        : prisma.customer.findMany({
             select: {
-              createdAt: true,
-              discountAmount: true,
-              discountPercent: true,
-              items: { select: { quantity: true, unitPrice: true } },
+              id: true,
+              name: true,
+              currentDebt: true,
+              creditLimit: true,
+              creditTermDays: true,
+              orders: {
+                where: { status: { in: REVENUE_STATUSES } },
+                orderBy: { createdAt: "desc" },
+                select: {
+                  createdAt: true,
+                  discountAmount: true,
+                  discountPercent: true,
+                  items: { select: { quantity: true, unitPrice: true } },
+                },
+              },
             },
-          },
-        },
-      }),
+          }),
     ]);
+    seriesOrders = ordersResult;
+    customersFromDb = custResult;
+  }
+
+  const mtdOrders = seriesOrders.filter((o) => o.createdAt >= mtdStart);
+  const prevOrders = seriesOrders.filter(
+    (o) => o.createdAt >= prevStart && o.createdAt < mtdStart,
+  );
+  const shippedSeries = seriesOrders.filter((o) => o.status === "SHIPPED");
 
   let totalDebt = 0;
   let currentAging = 0;
@@ -201,26 +224,59 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
   let warningCount = 0;
   let safeCount = 0;
 
-  for (const c of customers) {
-    const debt = Number(c.currentDebt);
-    totalDebt += debt;
-    const term = c.creditTermDays ?? 30;
-    const orderSummaries = (c.orders || []).map((o) => {
-      const raw = o.items.reduce((s, it) => s + it.quantity * Number(it.unitPrice), 0);
-      const discAmt = Number(o.discountAmount) || 0;
-      const discPct = o.discountPercent || 0;
-      const disc = discAmt > 0 ? discAmt : (discPct > 0 ? (raw * discPct / 100) : 0);
-      return { createdAt: o.createdAt, total: Math.max(0, raw - disc) };
-    });
+  let nearLimitDebtSum = 0;
+  let nearLimitCount = 0;
 
-    const aging = calculateDebtAging(debt, term, orderSummaries);
-    currentAging += aging.current;
-    overdue1_15Aging += aging.overdue1_15;
-    overdue16_30Aging += aging.overdue16_30;
-    badDebtAging += aging.badDebt;
-    if (aging.status === "critical") criticalCount++;
-    else if (aging.status === "warning") warningCount++;
-    else safeCount++;
+  if (prefetchedCustomers) {
+    for (const c of prefetchedCustomers) {
+      const debt = Number(c.currentDebt);
+      totalDebt += debt;
+      const aging = c.debtAging;
+      if (aging) {
+        currentAging += aging.current;
+        overdue1_15Aging += aging.overdue1_15;
+        overdue16_30Aging += aging.overdue16_30;
+        badDebtAging += aging.badDebt;
+        if (aging.status === "critical") criticalCount++;
+        else if (aging.status === "warning") warningCount++;
+        else safeCount++;
+      } else {
+        safeCount++;
+      }
+      const limit = Number(c.creditLimit);
+      if (limit > 0 && debt / limit >= CREDIT_ALERT_RATIO) {
+        nearLimitDebtSum += debt;
+        nearLimitCount += 1;
+      }
+    }
+  } else if (customersFromDb) {
+    for (const c of customersFromDb) {
+      const debt = Number(c.currentDebt);
+      totalDebt += debt;
+      const term = c.creditTermDays ?? 30;
+      const orderSummaries = (c.orders || []).map((o) => {
+        const raw = o.items.reduce((s, it) => s + it.quantity * Number(it.unitPrice), 0);
+        const discAmt = Number(o.discountAmount) || 0;
+        const discPct = o.discountPercent || 0;
+        const disc = discAmt > 0 ? discAmt : (discPct > 0 ? (raw * discPct / 100) : 0);
+        return { createdAt: o.createdAt, total: Math.max(0, raw - disc) };
+      });
+
+      const aging = calculateDebtAging(debt, term, orderSummaries);
+      currentAging += aging.current;
+      overdue1_15Aging += aging.overdue1_15;
+      overdue16_30Aging += aging.overdue16_30;
+      badDebtAging += aging.badDebt;
+      if (aging.status === "critical") criticalCount++;
+      else if (aging.status === "warning") warningCount++;
+      else safeCount++;
+
+      const limit = Number(c.creditLimit);
+      if (limit > 0 && debt / limit >= CREDIT_ALERT_RATIO) {
+        nearLimitDebtSum += debt;
+        nearLimitCount += 1;
+      }
+    }
   }
 
   const debtAgingOverview: DebtAgingOverview = {
@@ -254,18 +310,6 @@ export async function getDashboardOverview(): Promise<DashboardOverview> {
       : revenueMtd > 0
         ? null
         : 0;
-
-  let nearLimitDebtSum = 0;
-  let nearLimitCount = 0;
-  for (const c of customers) {
-    const debt = Number(c.currentDebt);
-    const limit = Number(c.creditLimit);
-    if (limit <= 0) continue;
-    if (debt / limit >= CREDIT_ALERT_RATIO) {
-      nearLimitDebtSum += debt;
-      nearLimitCount += 1;
-    }
-  }
 
   type Acc = { revenue: number; collection: number; liters: number };
   const monthlyMap = new Map<string, Acc>();

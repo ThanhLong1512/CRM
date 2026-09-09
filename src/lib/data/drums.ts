@@ -125,7 +125,9 @@ export async function listDrumCustomers(): Promise<DrumCustomerOption[]> {
   });
 }
 
-export async function getDrumStats(): Promise<DrumStats> {
+export async function getDrumStats(
+  prefetchedCustomers?: { outstandingDrums: number }[],
+): Promise<DrumStats> {
   const mtdStart = new Date(
     new Date().getFullYear(),
     new Date().getMonth(),
@@ -136,38 +138,60 @@ export async function getDrumStats(): Promise<DrumStats> {
     0,
   );
 
-  const [agg, issued, returned, issuedMtd, returnedMtd] = await Promise.all([
-    prisma.customer.aggregate({
+  let totalOutstanding = 0;
+  let customersHolding = 0;
+
+  if (prefetchedCustomers) {
+    for (const c of prefetchedCustomers) {
+      const d = Number(c.outstandingDrums || 0);
+      if (d > 0) {
+        totalOutstanding += d;
+        customersHolding += 1;
+      }
+    }
+  } else {
+    const agg = await prisma.customer.aggregate({
       _sum: { outstandingDrums: true },
-      _count: {
-        _all: true,
-      },
+      _count: { _all: true },
       where: { outstandingDrums: { gt: 0 } },
-    }),
-    prisma.drumTransaction.aggregate({
-      where: { type: "ISSUE" },
+    });
+    totalOutstanding = agg._sum.outstandingDrums ?? 0;
+    customersHolding = agg._count._all;
+  }
+
+  // Instead of 4 separate queries, use 2 groupBy queries (Lifetime & MTD)
+  const [lifetimeAgg, mtdAgg] = await Promise.all([
+    prisma.drumTransaction.groupBy({
+      by: ["type"],
       _sum: { quantity: true },
     }),
-    prisma.drumTransaction.aggregate({
-      where: { type: "RETURN" },
-      _sum: { quantity: true },
-    }),
-    prisma.drumTransaction.aggregate({
-      where: { type: "ISSUE", createdAt: { gte: mtdStart } },
-      _sum: { quantity: true },
-    }),
-    prisma.drumTransaction.aggregate({
-      where: { type: "RETURN", createdAt: { gte: mtdStart } },
+    prisma.drumTransaction.groupBy({
+      by: ["type"],
+      where: { createdAt: { gte: mtdStart } },
       _sum: { quantity: true },
     }),
   ]);
 
+  let totalIssued = 0;
+  let totalReturned = 0;
+  for (const row of lifetimeAgg) {
+    if (row.type === "ISSUE") totalIssued = row._sum.quantity ?? 0;
+    if (row.type === "RETURN") totalReturned = row._sum.quantity ?? 0;
+  }
+
+  let issuedMtd = 0;
+  let returnedMtd = 0;
+  for (const row of mtdAgg) {
+    if (row.type === "ISSUE") issuedMtd = row._sum.quantity ?? 0;
+    if (row.type === "RETURN") returnedMtd = row._sum.quantity ?? 0;
+  }
+
   return {
-    totalOutstanding: agg._sum.outstandingDrums ?? 0,
-    customersHolding: agg._count._all,
-    totalIssued: issued._sum.quantity ?? 0,
-    totalReturned: returned._sum.quantity ?? 0,
-    issuedMtd: issuedMtd._sum.quantity ?? 0,
-    returnedMtd: returnedMtd._sum.quantity ?? 0,
+    totalOutstanding,
+    customersHolding,
+    totalIssued,
+    totalReturned,
+    issuedMtd,
+    returnedMtd,
   };
 }

@@ -38,6 +38,7 @@ import { exportCustomerDebtReport } from "@/lib/exportUtils";
 import type { CreditOverrideRequest } from "../types";
 import type { AuthUserProfile } from "@/components/auth/authData";
 import { soundFX } from "@/components/utils/audio";
+import { ActionMenu, PageActionMenu, type ActionMenuItem } from "@/components/common/ActionMenu";
 
 export type CustomerFormInput = {
   name: string;
@@ -235,15 +236,16 @@ export default function CustomersView({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => exportCustomerDebtReport(customers)}
-            className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 shadow-xs hover:bg-emerald-100 transition-colors"
-            title="Xuất danh sách công nợ khách hàng và vỏ phuy ra file Excel CSV"
-          >
-            <FileSpreadsheet className="size-4 text-emerald-700" />
-            <span>Xuất Excel Sổ Nợ</span>
-          </button>
+          <PageActionMenu
+            label="Thao tác"
+            items={[
+              {
+                label: "Xuất Excel Sổ Nợ & Vỏ Phuy",
+                icon: FileSpreadsheet,
+                onClick: () => exportCustomerDebtReport(customers),
+              },
+            ]}
+          />
           <button
             type="button"
             onClick={openCreate}
@@ -255,15 +257,15 @@ export default function CustomersView({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+        <div className="col-span-2 sm:col-span-1 rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-xs">
           <div className="text-xs font-medium text-slate-500">
             Tổng công nợ đang treo
           </div>
-          <div className="mt-1 font-mono text-2xl font-extrabold text-slate-900">
+          <div className="mt-1 font-mono text-xl sm:text-2xl font-extrabold text-slate-900">
             {formatVND(totalCurrentDebt)}
           </div>
-          <div className="mt-1 text-[11px] text-slate-400">
+          <div className="mt-0.5 text-[10px] sm:text-[11px] text-slate-400">
             Hạn mức: <strong>{formatVND(totalCreditLimit)}</strong>
           </div>
         </div>
@@ -481,14 +483,18 @@ export default function CustomersView({
 
                   <div className="mt-2 space-y-1 text-xs text-slate-500">
                     {c.phone ? (
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="size-3.5" />
-                        {c.phone}
-                      </div>
+                      <a
+                        href={`tel:${c.phone}`}
+                        className="inline-flex items-center gap-1.5 font-medium text-slate-700 hover:text-amber-600 transition-colors"
+                        title="Bấm để gọi trực tiếp"
+                      >
+                        <Phone className="size-3.5 text-amber-600" />
+                        <span>{c.phone}</span>
+                      </a>
                     ) : null}
-                    <div className="flex items-start gap-1.5">
-                      <MapPin className="mt-0.5 size-3.5 shrink-0" />
-                      <span className="line-clamp-2">
+                    <div className="hidden sm:flex items-start gap-1.5">
+                      <MapPin className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+                      <span className="line-clamp-1">
                         {c.address || "Chưa có địa chỉ"}
                       </span>
                     </div>
@@ -545,7 +551,7 @@ export default function CustomersView({
                     )}
                   </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                  <div className="hidden sm:grid mt-2 grid-cols-2 gap-2 text-xs">
                     <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2">
                       <span className="flex items-center gap-1 text-[11px] text-slate-500">
                         <Package className="size-3.5 text-cyan-600" />
@@ -569,70 +575,65 @@ export default function CustomersView({
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => openEdit(c)}
-                    className="flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <Pencil className="size-3.5" />
-                    Sửa
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenLimitModal(c)}
-                    className="flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <Sliders className="size-3.5" />
-                    Hạn mức
-                  </button>
-                  {c.currentDebt > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCollectCustomer(c)}
-                      className="flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
-                      title="Lập phiếu thu tiền / Gạch nợ"
-                    >
-                      <Receipt className="size-3.5 text-emerald-700" />
-                      Thu nợ
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setZaloCustomer(c)}
-                    className="flex cursor-pointer items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
-                    title="Gửi Zalo đối soát nợ & sổ vỏ phuy"
-                  >
-                    <MessageCircle className="size-3.5 text-blue-600" />
-                    Zalo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        confirm(
-                          `Xóa khách hàng “${c.name}”? Thao tác không hoàn tác.`,
-                        )
-                      ) {
-                        onDeleteCustomer(c.id);
-                      }
-                    }}
-                    className="flex cursor-pointer items-center gap-1 rounded-lg border border-rose-200 px-2 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                  >
-                    <Trash2 className="size-3.5" />
-                    Xóa
-                  </button>
-                  {isHardLocked && (
-                    <button
-                      type="button"
-                      onClick={() => onApproveCreditOverride && onApproveCreditOverride(c.id)}
-                      className="flex cursor-pointer items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-2xs"
-                      title="Admin: Phê duyệt nhanh vượt trần nợ cho khách này"
-                    >
-                      <ShieldCheck className="size-3.5 text-emerald-700" />
-                      <span>Duyệt Admin</span>
-                    </button>
-                  )}
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                  <ActionMenu
+                    label="Thao tác"
+                    variant="outline"
+                    align="start"
+                    size="default"
+                    items={[
+                      {
+                        label: "Chỉnh sửa thông tin",
+                        icon: Pencil,
+                        onClick: () => openEdit(c),
+                      },
+                      {
+                        label: "Cài đặt hạn mức & công nợ",
+                        icon: Sliders,
+                        onClick: () => handleOpenLimitModal(c),
+                      },
+                      ...(c.currentDebt > 0
+                        ? [
+                            {
+                              label: "Lập phiếu thu nợ",
+                              icon: Receipt,
+                              badge: formatVND(c.currentDebt),
+                              onClick: () => setSelectedCollectCustomer(c),
+                            } as ActionMenuItem,
+                          ]
+                        : []),
+                      {
+                        label: "Gửi đối soát Zalo",
+                        icon: MessageCircle,
+                        onClick: () => setZaloCustomer(c),
+                      },
+                      ...(isHardLocked && onApproveCreditOverride
+                        ? [
+                            {
+                              label: "Duyệt ngoại lệ Admin",
+                              icon: ShieldCheck,
+                              onClick: () => onApproveCreditOverride(c.id),
+                            } as ActionMenuItem,
+                          ]
+                        : []),
+                      "separator",
+                      {
+                        label: "Xóa khách hàng",
+                        icon: Trash2,
+                        variant: "destructive",
+                        onClick: () => {
+                          if (
+                            confirm(
+                              `Xóa khách hàng “${c.name}”? Thao tác không hoàn tác.`,
+                            )
+                          ) {
+                            onDeleteCustomer(c.id);
+                          }
+                        },
+                      },
+                    ]}
+                  />
+
                   <button
                     type="button"
                     onClick={() => {
@@ -643,11 +644,11 @@ export default function CustomersView({
                         onNavigateToSales(c.id);
                       }
                     }}
-                    className={`ml-auto flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                    className={`flex h-8 cursor-pointer items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold transition shadow-2xs ${
                       isHardLocked
                         ? "bg-rose-100 text-rose-800 border border-rose-300 hover:bg-rose-200"
                         : c.creditOverridden
-                          ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-2xs"
+                          ? "bg-emerald-500 text-white hover:bg-emerald-600"
                           : "bg-amber-500 text-slate-950 hover:bg-amber-400"
                     }`}
                     title={

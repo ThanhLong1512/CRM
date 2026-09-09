@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import type { RemixStaffUser } from "@/lib/remix/load-bootstrap";
@@ -55,7 +55,54 @@ export default function StaffRBACView({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+      {/* Mobile User Cards List (sm:hidden) */}
+      <div className="space-y-3 sm:hidden">
+        {localUsers.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-500">
+            Chưa có user trong DB.
+          </div>
+        ) : (
+          localUsers.map((user) => (
+            <div
+              key={user.id}
+              className="space-y-2.5 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-bold text-slate-900 truncate">
+                  {user.name || "—"}
+                </h4>
+                <select
+                  value={user.role}
+                  onChange={(e) => {
+                    const role = e.target.value as UserRole;
+                    setLocalUsers((prev) =>
+                      prev.map((u) => (u.id === user.id ? { ...u, role } : u)),
+                    );
+                    onUpdateRole(user.id, role);
+                  }}
+                  className="rounded-lg border border-slate-200 bg-amber-50/50 px-2 py-1 font-mono text-xs font-bold text-slate-800"
+                >
+                  {ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span className="truncate">{user.email}</span>
+                <span className="shrink-0 font-mono text-[10px] text-slate-400">
+                  {new Date(user.createdAt).toLocaleDateString("vi-VN")}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop Table View (hidden sm:block) */}
+      <div className="hidden sm:block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-100 bg-slate-50 text-xs text-slate-500 uppercase">
             <tr>

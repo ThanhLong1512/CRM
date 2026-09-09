@@ -190,57 +190,57 @@ export default function DrumsView({
       </div>
 
       {/* 2. Top Drum Ledger Balance Cards (Bảng Cân Bằng Vỏ Phuy) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* Card 1: Drums at customer garages */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-xs text-slate-500 font-medium">
-              Vỏ Đang Nằm Tại Khách Hàng (Thị Trường)
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
+              Vỏ Tại Khách Hàng
             </div>
-            <div className="mt-2 text-3xl font-black font-mono text-amber-700">
-              {totalDrumsInMarket} <span className="text-sm font-semibold text-slate-500">vỏ</span>
+            <div className="mt-1 sm:mt-2 text-xl sm:text-3xl font-black font-mono text-amber-700">
+              {totalDrumsInMarket} <span className="text-xs sm:text-sm font-semibold text-slate-500">vỏ</span>
             </div>
-            <div className="text-[11px] text-amber-700 font-medium mt-1">
+            <div className="hidden sm:block text-[11px] text-amber-700 font-medium mt-1">
               Phân bổ trên {customers.filter((c) => (c.emptyDrums || 0) > 0).length} điểm bán &amp; đội xe
             </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-xl">
+          <div className="size-10 sm:size-12 shrink-0 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-lg sm:text-xl">
             🛢️
           </div>
         </div>
 
         {/* Card 2: Drums in transit */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-xs text-slate-500 font-medium">
-              Vỏ Đang Trên Xe Vận Chuyển Về Kho
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
+              Vỏ Trên Xe Về Kho
             </div>
-            <div className="mt-2 text-3xl font-black font-mono text-cyan-800">
-              {drumsInTransit} <span className="text-sm font-semibold text-slate-500">vỏ</span>
+            <div className="mt-1 sm:mt-2 text-xl sm:text-3xl font-black font-mono text-cyan-800">
+              {drumsInTransit} <span className="text-xs sm:text-sm font-semibold text-slate-500">vỏ</span>
             </div>
-            <div className="text-[11px] text-cyan-700 font-medium mt-1">
+            <div className="hidden sm:block text-[11px] text-cyan-700 font-medium mt-1">
               Đang trên 2 xe tải giao vận của công ty
             </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-cyan-100 text-cyan-800 flex items-center justify-center text-xl">
+          <div className="size-10 sm:size-12 shrink-0 rounded-2xl bg-cyan-100 text-cyan-800 flex items-center justify-center text-lg sm:text-xl">
             🚚
           </div>
         </div>
 
         {/* Card 3: Total Deposit Money tied up */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <div className="text-xs text-slate-500 font-medium">
-              Tổng Giá Trị Tiền Cọc Đang Treo
+        <div className="col-span-2 lg:col-span-1 bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
+              Tiền Cọc Đang Treo
             </div>
-            <div className="mt-2 text-2xl font-black font-mono text-emerald-800">
+            <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-black font-mono text-emerald-800">
               {formatVND(totalDepositTiedUp)}
             </div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              Định mức thế chân: <strong>400.000 đ / vỏ</strong>
+            <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 sm:mt-1">
+              Định mức: <strong>400.000 đ / vỏ</strong>
             </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl">
+          <div className="size-10 sm:size-12 shrink-0 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-lg sm:text-xl">
             💵
           </div>
         </div>
@@ -422,8 +422,72 @@ export default function DrumsView({
               </div>
             </div>
 
-            {/* Transactions Table */}
-            <div className="overflow-x-auto">
+            {/* Mobile Transactions Cards (For small screens: compact, actionable, no horizontal table scroll) */}
+            <div className="md:hidden space-y-2.5">
+              {localTransactions.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <span className="font-mono text-xs font-bold text-slate-500">#{tx.id}</span>
+                      <h4 className="font-bold text-slate-900 text-xs truncate mt-0.5">{tx.customerName}</h4>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400 shrink-0">{tx.timestamp}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-lg bg-white p-2 border border-slate-100 text-xs">
+                    <div className="flex items-center gap-3 font-mono">
+                      <span className="text-cyan-700 font-bold">Giao: {tx.delivered > 0 ? `+${tx.delivered}` : '-'}</span>
+                      <span className="text-emerald-700 font-bold">Thu: {tx.returned > 0 ? `-${tx.returned}` : '-'}</span>
+                    </div>
+                    <div className="font-bold text-slate-900 font-mono">
+                      Tồn: {tx.balanceAfter} vỏ
+                    </div>
+                  </div>
+
+                  <div className="pt-0.5">
+                    {tx.signature ? (
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5 text-emerald-800 min-w-0">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="font-semibold truncate text-[11px]">{tx.signedBy || 'Đã ký e-PoD'}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setViewingProofTx(tx)}
+                          className="text-[11px] font-bold text-cyan-700 hover:underline cursor-pointer shrink-0 ml-2"
+                        >
+                          Xem e-PoD
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetTxForSignature(tx);
+                          setSignedName(
+                            tx.customerName
+                              ? `${tx.customerName} (Chủ Garage)`
+                              : 'Chủ Garage / Người nhận'
+                          );
+                          clearCanvas();
+                          setShowSignatureModal(true);
+                        }}
+                        className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-cyan-800 text-xs font-bold cursor-pointer"
+                      >
+                        <PenTool className="w-3 h-3" />
+                        <span>Ký nhận e-PoD</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Transactions Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-200">

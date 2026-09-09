@@ -1,5 +1,6 @@
-﻿"use client";
+"use client";
 import { ElementType } from 'react';
+import AppLogo from '@/components/common/AppLogo';
 import { NavigationModule } from '../types';
 import {
   LayoutDashboard,
@@ -139,19 +140,7 @@ export default function Sidebar({
       <div className="flex flex-col flex-1 overflow-y-auto">
         {/* Brand Header */}
         <div className="p-4 border-b border-slate-800/80 bg-[#0F172A] flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-md shadow-amber-900/30 shrink-0">
-              <Flame className="w-5 h-5 fill-white/20" />
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-amber-500 tracking-wider uppercase font-mono">
-                LUBRICANTS CRM & DMS
-              </div>
-              <div className="text-sm font-bold text-white tracking-tight leading-tight">
-                Dầu Nhớt &amp; Phụ Tùng
-              </div>
-            </div>
-          </div>
+          <AppLogo variant="sidebar" />
 
           {/* Close button on mobile drawer */}
           {isMobile && onCloseMobile && (

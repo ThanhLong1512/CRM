@@ -28,6 +28,7 @@ import {
 } from "@/components/auth/authData";
 import { soundFX } from "@/components/utils/audio";
 import { toast } from "sonner";
+import AppLogo from "@/components/common/AppLogo";
 
 type AuthMode = "login" | "register" | "forgot";
 
@@ -189,22 +190,10 @@ export default function AuthScreen({
       <div className="pointer-events-none absolute top-0 left-1/4 h-96 w-96 rounded-full bg-amber-500/10 blur-3xl" />
       <div className="pointer-events-none absolute right-1/4 bottom-0 h-[500px] w-[500px] rounded-full bg-sky-600/10 blur-3xl" />
 
-      <div className="z-10 grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/90 shadow-2xl backdrop-blur-xl lg:grid-cols-12">
-        <div className="relative flex flex-col justify-between border-b border-slate-800 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-6 sm:p-8 lg:col-span-5 lg:border-r lg:border-b-0 lg:p-10">
+      <div className="z-10 grid w-full max-w-md lg:max-w-5xl grid-cols-1 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/90 shadow-2xl backdrop-blur-xl lg:grid-cols-12">
+        <div className="relative hidden lg:flex flex-col justify-between border-b border-slate-800 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-6 sm:p-8 lg:col-span-5 lg:border-r lg:border-b-0 lg:p-10">
           <div>
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/20">
-                <Fuel className="h-7 w-7" />
-              </div>
-              <div>
-                <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">
-                  REMIX LUBRICANTS
-                </h1>
-                <p className="font-mono text-xs font-bold tracking-wider text-amber-400 uppercase">
-                  CRM &amp; DMS Enterprise System
-                </p>
-              </div>
-            </div>
+            <AppLogo variant="login" className="mb-6" />
             <p className="mb-6 text-xs leading-relaxed font-medium text-slate-300 sm:text-sm">
               Giải pháp số hóa toàn diện kênh phân phối Dầu Nhớt &amp; Phụ Tùng
               B2B: Kiểm soát công nợ, quản lý luân chuyển vỏ phuy sắt 200L và
@@ -261,6 +250,9 @@ export default function AuthScreen({
 
         <div className="flex flex-col justify-center bg-slate-900/60 p-6 sm:p-8 lg:col-span-7 lg:p-10">
           <div className="mb-6">
+            <div className="lg:hidden mb-5 flex items-center justify-center">
+              <AppLogo variant="sidebar" />
+            </div>
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-xs font-bold tracking-widest text-amber-500 uppercase">
                 {mode === "login"

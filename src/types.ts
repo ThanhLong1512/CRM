@@ -1,7 +1,14 @@
 export type CustomerType = 'Đại lý' | 'Đội xe' | 'Thợ';
 
 export type BaseOilType = 'Khoáng' | 'Bán tổng hợp' | 'Tổng hợp toàn phần';
-export type PackageType = 'Phuy 200L' | 'Thùng 18L' | 'Xô 4L' | 'Chai 1L';
+export type PackageType =
+  | 'Phuy 208L'
+  | 'Phuy 200L'
+  | 'Thùng 18L'
+  | 'Xô 18L'
+  | 'Xô 4L'
+  | 'Can 4L'
+  | 'Chai 1L';
 
 export interface Product {
   id: string;
@@ -16,6 +23,10 @@ export interface Product {
   priceDealer: number;
   priceMechanic: number;
   priceFleet: number;
+  wholesalePrice?: number;
+  garagePrice?: number;
+  retailPrice?: number;
+  volumeLiters?: number;
   stock: number;
   minSafeStock: number;
   maxStock: number;
@@ -78,6 +89,7 @@ export interface Customer {
   avgCycleDays?: number; // e.g. 18 days cycle
   favoriteSku?: string;
   rfmSegment?: 'VIP' | 'At Risk' | 'Potential' | 'Stable';
+  dealerTier?: 'GOLD' | 'SILVER' | 'RETAIL';
   creditOverridden?: boolean;
   creditOverrideReason?: string;
   creditOverrideRequestedAt?: string;
@@ -145,6 +157,13 @@ export interface Order {
   createdAt?: string;
   isOverCredit?: boolean;
   creditApprovedBy?: string;
+  isCreditOverride?: boolean;
+  creditOverrideReason?: string;
+  creditOverrideStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  creditOverrideApprovedBy?: string;
+  drumDelivered?: number;
+  drumReturned?: number;
+  drumDepositAmount?: number;
   driverName?: string;
   driverPhone?: string;
   pickingDetails?: {

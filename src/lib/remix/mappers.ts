@@ -25,9 +25,9 @@ export function volumeToPackageType(
   volume: string | null | undefined,
 ): PackageType {
   const liters = parseProductLiters(volume);
-  if (liters >= 150) return "Phuy 200L";
-  if (liters >= 10) return "Thùng 18L";
-  if (liters >= 3) return "Xô 4L";
+  if (liters >= 150) return "Phuy 208L";
+  if (liters >= 10) return "Xô 18L";
+  if (liters >= 3) return "Can 4L";
   return "Chai 1L";
 }
 
@@ -45,7 +45,7 @@ export function mapPrismaOrderStatus(
       return "Xuất kho";
     case "SHIPPED":
       return "Giao hàng";
-    case "CANCELLED":
+    case "DELIVERED":
       return "Hoàn thành";
     default:
       return "Chờ duyệt";
@@ -63,7 +63,7 @@ export function mapRemixOrderStatusToPrisma(
     case "Giao hàng":
       return "SHIPPED";
     case "Hoàn thành":
-      return "SHIPPED";
+      return "DELIVERED";
     default:
       return "PENDING";
   }
@@ -89,6 +89,9 @@ function mapRfmSegment(
 
 export function mapProductDto(dto: ProductDto): Product {
   const unitPrice = dto.unitPrice;
+  const wholesalePrice = dto.wholesalePrice ?? unitPrice;
+  const garagePrice = dto.garagePrice ?? unitPrice;
+  const retailPrice = dto.retailPrice ?? Math.round(unitPrice * 1.15);
   return {
     id: dto.id,
     name: dto.name,
@@ -99,9 +102,13 @@ export function mapProductDto(dto: ProductDto): Product {
     standards: dto.standard ?? "",
     baseOil: "Khoáng",
     drumReturnable: dto.isDrum,
-    priceDealer: unitPrice,
-    priceMechanic: unitPrice,
+    priceDealer: wholesalePrice,
+    priceMechanic: garagePrice,
     priceFleet: unitPrice,
+    wholesalePrice,
+    garagePrice,
+    retailPrice,
+    volumeLiters: dto.volumeLiters ?? parseProductLiters(dto.volume),
     stock: dto.stock,
     minSafeStock: 0,
     maxStock: Math.max(dto.stock, 100),
@@ -148,6 +155,10 @@ export function mapCustomerDto(
     debtAging: dto.debtAging,
     emptyDrums: dto.outstandingDrums ?? 0,
     drumBalance: dto.outstandingDrums ?? 0,
+    dealerTier: dto.dealerTier ?? "RETAIL",
+    creditOverridden: dto.creditOverridden,
+    creditOverrideReason: dto.creditOverrideReason ?? undefined,
+    creditOverrideApprovedBy: dto.creditOverrideApprovedBy ?? undefined,
     loyaltyPoints: 0,
     lastPurchaseDaysAgo: rfm?.recencyDays ?? 999,
     rfmSegment: mapRfmSegment(rfm?.segment),
@@ -167,6 +178,13 @@ export function mapOrderDto(dto: OrderDto): Order {
     promotionNotes: dto.promotionNotes ?? undefined,
     totalLiters: dto.totalLiters,
     createdAt: dto.createdAt,
+    drumDelivered: dto.drumDelivered,
+    drumReturned: dto.drumReturned,
+    drumDepositAmount: dto.drumDepositAmount,
+    isCreditOverride: dto.isCreditOverride,
+    creditOverrideReason: dto.creditOverrideReason ?? undefined,
+    creditOverrideStatus: dto.creditOverrideStatus ?? undefined,
+    creditOverrideApprovedBy: dto.creditOverrideApprovedBy ?? undefined,
     items: dto.items.map((item) => ({
       productId: item.productId,
       productName: item.productName,
