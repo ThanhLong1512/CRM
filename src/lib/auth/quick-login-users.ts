@@ -9,6 +9,8 @@ import {
 function roleLabel(role: QuickLoginUserDto["role"]): string {
   if (role === "sales") return "Sales";
   if (role === "accountant") return "Kế Toán";
+  if (role === "fleet") return "Đội Xe / Vận Tải";
+  if (role === "dealer") return "Đại Lý Cấp 1";
   return "GĐ Kinh Doanh";
 }
 

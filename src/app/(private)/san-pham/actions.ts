@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireRoles } from "@/lib/auth";
 
 export type ProductActionResult = {
   success: boolean;
@@ -97,6 +98,12 @@ function ok(message: string): ProductActionResult {
 export async function createProduct(
   formData: FormData,
 ): Promise<ProductActionResult> {
+  try {
+    await requireRoles(["ADMIN", "ACCOUNTANT"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
   const parsed = parseProductFormData(formData);
   if ("error" in parsed) {
     return fail(parsed.error);
@@ -120,6 +127,12 @@ export async function updateProduct(
     return fail("Thiếu mã sản phẩm.");
   }
 
+  try {
+    await requireRoles(["ADMIN", "ACCOUNTANT"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
   const parsed = parseProductFormData(formData);
   if ("error" in parsed) {
     return fail(parsed.error);
@@ -141,6 +154,12 @@ export async function updateProduct(
 export async function deleteProduct(id: string): Promise<ProductActionResult> {
   if (!id) {
     return fail("Thiếu mã sản phẩm.");
+  }
+
+  try {
+    await requireRoles(["ADMIN"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
   }
 
   try {

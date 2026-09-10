@@ -3,10 +3,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { Customer, Product, Order } from '../types';
 import { soundFX } from '../utils/audio';
 import {
-  seedOfflineDatabase,
+  syncOfflineDatabase,
   enqueueOfflineOrder,
   recordOfflineCollection,
-} from '../db/offlineDb';
+} from '@/db/offlineDb';
 
 import dynamic from 'next/dynamic';
 const PwaRouteMap = dynamic(() => import('./pwa/PwaRouteMap'), {
@@ -102,8 +102,10 @@ export default function SalesPWAView({
 
   // Initialize Dexie offline DB on mount
   useEffect(() => {
-    seedOfflineDatabase().catch(console.error);
-  }, []);
+    if (customers.length > 0 || products.length > 0) {
+      syncOfflineDatabase(customers, products).catch(console.error);
+    }
+  }, [customers, products]);
 
   // Total cart items count
   const cartItemCount = Object.values(cart).reduce<number>(

@@ -18,13 +18,14 @@ export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  allowedRoles?: UserRole[];
   requiresAdmin?: boolean;
 };
 
 export type NavGroup = {
   id: string;
   label: string;
-  requiresAdmin?: boolean;
+  allowedRoles?: UserRole[];
   items: NavItem[];
 };
 
@@ -32,68 +33,120 @@ export const navGroups: NavGroup[] = [
   {
     id: "tong-quan",
     label: "Tổng quan",
+    allowedRoles: ["ADMIN", "ACCOUNTANT", "SALES"],
     items: [
-      { href: "/dashboard", label: "Dashboard & RFM", icon: LayoutDashboard },
+      {
+        href: "/dashboard",
+        label: "Dashboard & RFM",
+        icon: LayoutDashboard,
+        allowedRoles: ["ADMIN", "ACCOUNTANT", "SALES"],
+      },
     ],
   },
   {
     id: "kinh-doanh",
     label: "Kinh doanh & Thực địa",
     items: [
-      { href: "/khach-hang", label: "Khách hàng & Công nợ", icon: Users },
-      { href: "/phieu-thu", label: "Sổ phiếu thu nợ", icon: Receipt },
-      { href: "/don-hang", label: "Đơn hàng & Kanban", icon: ClipboardList },
-      { href: "/fleet", label: "Đội xe & Bảo dưỡng", icon: Truck },
-      { href: "/sales", label: "Tuyến Sales & Check-in", icon: Route },
-      { href: "/tich-diem", label: "Tích điểm thợ máy", icon: Gift },
+      {
+        href: "/khach-hang",
+        label: "Khách hàng & Công nợ",
+        icon: Users,
+        allowedRoles: ["ADMIN", "ACCOUNTANT", "SALES"],
+      },
+      {
+        href: "/phieu-thu",
+        label: "Sổ phiếu thu nợ",
+        icon: Receipt,
+        allowedRoles: ["ADMIN", "ACCOUNTANT"],
+      },
+      {
+        href: "/don-hang",
+        label: "Đơn hàng & Kanban",
+        icon: ClipboardList,
+        allowedRoles: ["ADMIN", "ACCOUNTANT", "SALES", "FLEET", "DEALER"],
+      },
+      {
+        href: "/fleet",
+        label: "Đội xe & Bảo dưỡng",
+        icon: Truck,
+        allowedRoles: ["ADMIN", "FLEET"],
+      },
+      {
+        href: "/sales",
+        label: "Tuyến Sales & Check-in",
+        icon: Route,
+        allowedRoles: ["ADMIN", "SALES"],
+      },
+      {
+        href: "/tich-diem",
+        label: "Tích điểm thợ máy",
+        icon: Gift,
+        allowedRoles: ["ADMIN", "SALES", "DEALER"],
+      },
     ],
   },
   {
     id: "kho",
     label: "Kho & Hàng hóa",
     items: [
-      { href: "/san-pham", label: "Master Data sản phẩm", icon: Package },
-      { href: "/vo-phuy", label: "Quản lý vỏ phuy", icon: Cylinder },
+      {
+        href: "/san-pham",
+        label: "Master Data sản phẩm",
+        icon: Package,
+        allowedRoles: ["ADMIN", "ACCOUNTANT", "SALES", "FLEET", "DEALER"],
+      },
+      {
+        href: "/vo-phuy",
+        label: "Quản lý vỏ phuy",
+        icon: Cylinder,
+        allowedRoles: ["ADMIN", "ACCOUNTANT", "SALES", "FLEET", "DEALER"],
+      },
     ],
   },
   {
     id: "he-thong",
     label: "Hệ thống",
-    requiresAdmin: true,
+    allowedRoles: ["ADMIN"],
     items: [
       {
         href: "/nhan-su",
         label: "Nhân sự & Phân quyền",
         icon: Shield,
-        requiresAdmin: true,
+        allowedRoles: ["ADMIN"],
       },
       {
         href: "/cau-hinh",
         label: "Cấu hình hệ thống",
         icon: Settings,
-        requiresAdmin: true,
+        allowedRoles: ["ADMIN"],
       },
     ],
   },
 ];
 
 function canAccess(
+  allowedRoles: UserRole[] | undefined,
   requiresAdmin: boolean | undefined,
   role: string,
 ): boolean {
-  if (!requiresAdmin) return true;
-  return role === "ADMIN";
+  if (role === "ADMIN") return true;
+  if (requiresAdmin) return false;
+  if (!allowedRoles) return true;
+  return allowedRoles.includes(role as UserRole);
 }
 
 export function filterNavGroups(
   role: UserRole | string,
   groups: NavGroup[] = navGroups,
 ): NavGroup[] {
+  const normalizedRole = String(role).toUpperCase();
   return groups
-    .filter((group) => canAccess(group.requiresAdmin, role))
+    .filter((group) => canAccess(group.allowedRoles, undefined, normalizedRole))
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canAccess(item.requiresAdmin, role)),
+      items: group.items.filter((item) =>
+        canAccess(item.allowedRoles, item.requiresAdmin, normalizedRole),
+      ),
     }))
     .filter((group) => group.items.length > 0);
 }

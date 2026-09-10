@@ -12,6 +12,7 @@ import { listFleetVehicles } from "@/lib/data/fleet";
 import { listOrders } from "@/lib/data/orders";
 import { listProducts } from "@/lib/data/products";
 import { listRfmSegments, type RfmOverview } from "@/lib/data/rfm";
+import { getSystemSettings, type SystemSettingDto } from "@/lib/data/settings";
 import { prisma } from "@/lib/prisma";
 import {
   mapCustomersWithRfm,
@@ -21,6 +22,7 @@ import {
   mapProductDto,
 } from "@/lib/remix/mappers";
 import type {
+  CreditOverrideRequest,
   Customer,
   DrumTransaction,
   FleetVehicle,
@@ -48,6 +50,8 @@ export type RemixBootstrap = {
   drumStats: DrumStats;
   rfm: RfmOverview;
   staffUsers: RemixStaffUser[];
+  creditOverrideRequests: CreditOverrideRequest[];
+  systemSettings: SystemSettingDto;
 };
 
 const fetchRemixBootstrap = async (): Promise<RemixBootstrap> => {
@@ -64,8 +68,8 @@ const fetchRemixBootstrap = async (): Promise<RemixBootstrap> => {
     listDrumTransactions(),
   ]);
 
-  // Batch 3: Staff Users & Drum Stats (pass customerDtos to eliminate customer.aggregate) (2 queries)
-  const [users, drumStats] = await Promise.all([
+  // Batch 3: Staff Users, Drum Stats, Credit Overrides & System Settings from DB (4 queries)
+  const [users, drumStats, creditOverrides, systemSettings] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
       select: {
@@ -78,6 +82,15 @@ const fetchRemixBootstrap = async (): Promise<RemixBootstrap> => {
       },
     }),
     getDrumStats(customerDtos),
+    prisma.approvalRequest.findMany({
+      where: { targetType: "ORDER_CREDIT_OVERRIDE" },
+      include: {
+        requester: { select: { name: true } },
+        actionUser: { select: { name: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    getSystemSettings(),
   ]);
 
   // Step 4: Pure In-Memory calculations for Dashboard & RFM (0 DB queries!)
@@ -101,8 +114,32 @@ const fetchRemixBootstrap = async (): Promise<RemixBootstrap> => {
       role: u.role,
       createdAt: u.createdAt.toISOString(),
     })),
+    creditOverrideRequests: creditOverrides.map((r): CreditOverrideRequest => {
+      const meta = (r.metadata as Record<string, any>) || {};
+      return {
+        id: r.id,
+        customerId: r.targetId,
+        customerName: meta.customerName || r.title,
+        requestedBy: r.requester?.name || "Sales thị trường",
+        currentDebt: Number(meta.currentDebt ?? 0),
+        creditLimit: Number(meta.creditLimit ?? 0),
+        overdueDays: Number(meta.overdueDays ?? 0),
+        reason: r.summary || meta.reason || "",
+        requestedAmount: Number(r.amount ?? meta.requestedAmount ?? 0),
+        requestedAt: new Date(r.createdAt).toLocaleTimeString("vi-VN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        status: (r.status as "PENDING" | "APPROVED" | "REJECTED") || "PENDING",
+        reviewedBy: r.actionUser?.name ?? undefined,
+        reviewedAt: r.actionAt ? new Date(r.actionAt).toISOString() : undefined,
+        rejectReason: r.decisionReason ?? undefined,
+      };
+    }),
+    systemSettings,
   };
 };
+
 
 export const loadRemixBootstrap = async (): Promise<RemixBootstrap> => {
   return fetchRemixBootstrap();

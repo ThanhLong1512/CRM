@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { PointLedgerReason } from "@prisma/client";
 import { normalizeLoyaltyCode } from "@/lib/loyalty-code";
 import { prisma } from "@/lib/prisma";
+import { requireRoles } from "@/lib/auth";
 
 export type LoyaltyActionResult = {
   success: boolean;
@@ -29,6 +30,12 @@ export async function findOrCreateMechanic(input: {
   name: string;
   phone: string;
 }): Promise<LoyaltyActionResult> {
+  try {
+    await requireRoles(["ADMIN", "SALES", "DEALER"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
   const name = String(input.name ?? "").trim();
   const phone = String(input.phone ?? "").trim().replace(/\s+/g, "");
 
@@ -74,6 +81,12 @@ export async function scanLoyaltyCode(input: {
   code: string;
   mechanicId: string;
 }): Promise<LoyaltyActionResult> {
+  try {
+    await requireRoles(["ADMIN", "SALES", "DEALER"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
   const mechanicId = String(input.mechanicId ?? "").trim();
   const code = normalizeLoyaltyCode(input.code);
 
@@ -150,6 +163,12 @@ export async function redeemReward(input: {
   mechanicId: string;
   rewardId: string;
 }): Promise<LoyaltyActionResult> {
+  try {
+    await requireRoles(["ADMIN", "SALES", "DEALER"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
   const mechanicId = String(input.mechanicId ?? "").trim();
   const rewardId = String(input.rewardId ?? "").trim();
 

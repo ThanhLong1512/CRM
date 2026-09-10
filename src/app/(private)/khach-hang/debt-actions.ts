@@ -7,7 +7,7 @@ import {
   Prisma,
   type UserRole,
 } from "@prisma/client";
-import { getSessionDbUser } from "@/lib/auth";
+import { getSessionDbUser, requireRoles } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatVND } from "@/lib/formatMoney";
 
@@ -130,9 +130,11 @@ export async function createDebtPayment(input: {
   method?: "CASH" | "BANK_TRANSFER";
   notes?: string;
 }): Promise<DebtPaymentResult> {
-  const { dbUser } = await getSessionDbUser();
-  if (!dbUser) {
-    return fail("Bạn cần đăng nhập để lập phiếu thu.");
+  let dbUser;
+  try {
+    dbUser = await requireRoles(["ADMIN", "ACCOUNTANT", "SALES"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
   }
 
   const customerId = String(input.customerId ?? "").trim();

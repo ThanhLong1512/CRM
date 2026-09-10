@@ -1,6 +1,5 @@
 import Dexie, { type Table } from 'dexie';
 import { Customer, Product, Order } from '../types';
-import { INITIAL_CUSTOMERS, INITIAL_PRODUCTS } from '../mockData';
 
 export interface OfflineCollection {
   id: string;
@@ -31,21 +30,29 @@ export class PetrolubricantOfflineDB extends Dexie {
 
 export const offlineDb = new PetrolubricantOfflineDB();
 
-// Seed initial database if empty
-export async function seedOfflineDatabase(): Promise<void> {
+/**
+ * Đồng bộ danh mục khách hàng & sản phẩm thực tế từ Database PostgreSQL vào Dexie IndexedDB
+ * (Loại bỏ 100% dữ liệu mock, đảm bảo tính bền vững và đồng nhất dữ liệu)
+ */
+export async function syncOfflineDatabase(customers?: Customer[], products?: Product[]): Promise<void> {
   try {
-    const custCount = await offlineDb.offline_customers.count();
-    if (custCount === 0) {
-      await offlineDb.offline_customers.bulkPut(INITIAL_CUSTOMERS);
+    if (customers && customers.length > 0) {
+      await offlineDb.offline_customers.clear();
+      await offlineDb.offline_customers.bulkPut(customers);
     }
 
-    const prodCount = await offlineDb.offline_products.count();
-    if (prodCount === 0) {
-      await offlineDb.offline_products.bulkPut(INITIAL_PRODUCTS);
+    if (products && products.length > 0) {
+      await offlineDb.offline_products.clear();
+      await offlineDb.offline_products.bulkPut(products);
     }
   } catch (err) {
-    console.warn('Error seeding Dexie database:', err);
+    console.warn('Error syncing Dexie database from PostgreSQL:', err);
   }
+}
+
+/** Tương thích ngược: Đồng bộ dữ liệu thực tế thay vì nạp mock data */
+export async function seedOfflineDatabase(customers?: Customer[], products?: Product[]): Promise<void> {
+  return syncOfflineDatabase(customers, products);
 }
 
 // Queue offline order

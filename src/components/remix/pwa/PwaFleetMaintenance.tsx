@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo } from 'react';
 import { Vehicle, Product, Customer } from '../../types';
-import { formatVND } from '../../mockData';
+import { formatVND } from '@/lib/remix/mappers';
 import { soundFX } from '../../utils/audio';
 import {
   Truck,

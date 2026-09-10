@@ -13,6 +13,8 @@ function mapRegRole(raw: string): UserRole {
   const v = raw.trim().toLowerCase();
   if (v === "accountant" || v === "ketoan") return "ACCOUNTANT";
   if (v === "director" || v === "admin") return "ADMIN";
+  if (v === "fleet" || v === "doixe") return "FLEET";
+  if (v === "dealer" || v === "daily" || v === "garage") return "DEALER";
   return "SALES";
 }
 

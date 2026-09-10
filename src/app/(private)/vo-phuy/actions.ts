@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getSessionDbUser } from "@/lib/auth";
+import { getSessionDbUser, requireRoles, requireAuthUser } from "@/lib/auth";
 import { listDrumTransactions } from "@/lib/data/drums";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -29,11 +29,7 @@ function revalidateDrumPaths() {
 }
 
 async function requireActor() {
-  const { dbUser } = await getSessionDbUser();
-  if (!dbUser) {
-    throw new Error("Bạn cần đăng nhập để ghi sổ vỏ phuy.");
-  }
-  return dbUser;
+  return requireRoles(["ADMIN", "ACCOUNTANT", "SALES", "FLEET"]);
 }
 
 export async function issueDrums(input: {
@@ -199,7 +195,7 @@ export async function adjustDrums(input: {
   }
 
   try {
-    const actor = await requireActor();
+    const actor = await requireRoles(["ADMIN", "ACCOUNTANT"]);
 
     await prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findUnique({
@@ -246,4 +242,51 @@ export async function getCustomerDrumHistory(customerId: string) {
   const id = String(customerId ?? "").trim();
   if (!id) return [];
   return listDrumTransactions(id);
+}
+
+export async function signDrumTransactionAction(input: {
+  transactionId: string;
+  signature: string;
+  signedBy: string;
+}): Promise<DrumActionResult> {
+  const transactionId = String(input.transactionId ?? "").trim();
+  const signature = String(input.signature ?? "").trim();
+  const signedBy = String(input.signedBy ?? "").trim();
+
+  if (!transactionId) return fail("Thiếu mã giao dịch vỏ phuy.");
+  if (!signature) return fail("Thiếu dữ liệu chữ ký e-PoD.");
+
+  try {
+    await requireAuthUser();
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
+  try {
+    const existing = await prisma.drumTransaction.findUnique({
+      where: { id: transactionId },
+    });
+
+    if (!existing) {
+      return fail("Không tìm thấy giao dịch vỏ phuy trong cơ sở dữ liệu.");
+    }
+
+    await prisma.drumTransaction.update({
+      where: { id: transactionId },
+      data: {
+        signature,
+        signedBy: signedBy || null,
+      },
+    });
+
+    revalidateDrumPaths();
+    return ok("Đã lưu chữ ký xác thực e-PoD vào cơ sở dữ liệu.");
+  } catch (error) {
+    console.error("[signDrumTransactionAction error]:", error);
+    return fail(
+      error instanceof Error
+        ? error.message
+        : "Không thể lưu chữ ký xác thực e-PoD vào cơ sở dữ liệu.",
+    );
+  }
 }

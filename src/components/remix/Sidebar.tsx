@@ -19,6 +19,24 @@ import {
   Receipt,
 } from 'lucide-react';
 
+import type { SystemSettingDto } from '@/lib/data/settings';
+import type { AuthUserProfile } from '@/components/auth/authData';
+import type { UserRole } from '@prisma/client';
+
+export const MODULE_ALLOWED_ROLES: Record<NavigationModule, UserRole[]> = {
+  dashboard: ["ADMIN", "ACCOUNTANT", "SALES"],
+  customers: ["ADMIN", "ACCOUNTANT", "SALES"],
+  kanban: ["ADMIN", "ACCOUNTANT", "SALES", "FLEET", "DEALER"],
+  debt_receipts: ["ADMIN", "ACCOUNTANT"],
+  fleet: ["ADMIN", "FLEET"],
+  sales_pwa: ["ADMIN", "SALES"],
+  loyalty_qr: ["ADMIN", "SALES", "DEALER"],
+  products: ["ADMIN", "ACCOUNTANT", "SALES", "FLEET", "DEALER"],
+  drums: ["ADMIN", "ACCOUNTANT", "SALES", "FLEET", "DEALER"],
+  staff_rbac: ["ADMIN"],
+  settings: ["ADMIN"],
+};
+
 interface SidebarProps {
   currentModule: NavigationModule;
   onSelectModule: (module: NavigationModule) => void;
@@ -27,6 +45,9 @@ interface SidebarProps {
   rfmAlertCount: number;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
+  systemSettings?: SystemSettingDto;
+  sessionUser?: AuthUserProfile | null;
+  userRole?: UserRole | string;
 }
 
 interface NavItem {
@@ -50,8 +71,38 @@ export default function Sidebar({
   rfmAlertCount,
   isOpenMobile = false,
   onCloseMobile,
+  systemSettings,
+  sessionUser,
+  userRole,
 }: SidebarProps) {
   const { t } = useTranslation();
+
+  const resolvedRole: UserRole = (() => {
+    const raw = sessionUser?.rawRole || userRole;
+    if (raw && ["ADMIN", "ACCOUNTANT", "SALES", "FLEET", "DEALER"].includes(raw as UserRole)) {
+      return raw as UserRole;
+    }
+    if (sessionUser?.role === "director") return "ADMIN";
+    if (sessionUser?.role === "accountant") return "ACCOUNTANT";
+    if (sessionUser?.role === "fleet") return "FLEET";
+    if (sessionUser?.role === "dealer") return "DEALER";
+    return "SALES";
+  })();
+
+  const getCustomLabel = (id: NavigationModule, defaultLabel: string): string => {
+    if (resolvedRole === "FLEET") {
+      if (id === "kanban") return "Đơn hàng & Giao vận";
+      if (id === "drums") return "Ký nhận & Vỏ phuy";
+      if (id === "products") return "Tra cứu dầu nhớt xe";
+    }
+    if (resolvedRole === "DEALER") {
+      if (id === "kanban") return "Đơn đặt hàng đại lý";
+      if (id === "products") return "Bảng giá & Danh mục";
+      if (id === "drums") return "Vỏ phuy đang mượn";
+      if (id === "loyalty_qr") return "Tích điểm & Đổi quà";
+    }
+    return defaultLabel;
+  };
 
   const navigationGroups: NavGroup[] = [
     {
@@ -67,7 +118,7 @@ export default function Sidebar({
       ],
     },
     {
-      groupLabel: t('navSalesField'),
+      groupLabel: resolvedRole === "DEALER" ? "Đại lý phân phối" : resolvedRole === "FLEET" ? "Vận tải & Giao vận" : t('navSalesField'),
       items: [
         {
           id: 'customers',
@@ -76,7 +127,7 @@ export default function Sidebar({
         },
         {
           id: 'kanban',
-          label: t('modOrders'),
+          label: getCustomLabel('kanban', t('modOrders')),
           icon: ShoppingCart,
           badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined,
           badgeVariant: 'info',
@@ -100,22 +151,22 @@ export default function Sidebar({
         },
         {
           id: 'loyalty_qr',
-          label: t('modLoyaltyQr'),
+          label: getCustomLabel('loyalty_qr', t('modLoyaltyQr')),
           icon: QrCode,
         },
       ],
     },
     {
-      groupLabel: t('navInventoryWarehouse'),
+      groupLabel: resolvedRole === "DEALER" ? "Hàng hóa & Vỏ phuy" : resolvedRole === "FLEET" ? "Kho phuy & Hàng hóa" : t('navInventoryWarehouse'),
       items: [
         {
           id: 'products',
-          label: t('modProducts'),
+          label: getCustomLabel('products', t('modProducts')),
           icon: Boxes,
         },
         {
           id: 'drums',
-          label: t('modDrums'),
+          label: getCustomLabel('drums', t('modDrums')),
           icon: Package,
         },
       ],
@@ -136,6 +187,16 @@ export default function Sidebar({
       ],
     },
   ];
+
+  const filteredNavigationGroups = navigationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        const allowed = MODULE_ALLOWED_ROLES[item.id] || ["ADMIN"];
+        return allowed.includes(resolvedRole);
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const handleItemClick = (mod: NavigationModule) => {
     onSelectModule(mod);
@@ -170,7 +231,7 @@ export default function Sidebar({
 
         {/* Navigation Groups */}
         <nav className="p-3 space-y-4 flex-1">
-          {navigationGroups.map((group) => (
+          {filteredNavigationGroups.map((group) => (
             <div key={group.groupLabel} className="space-y-1">
               <div className="px-3 text-[10px] font-bold tracking-wider text-slate-500 uppercase">
                 {group.groupLabel}
@@ -231,15 +292,21 @@ export default function Sidebar({
       {/* Warehouse & Quick Info Footer */}
       <div className="p-3 m-3 rounded-xl bg-slate-800/60 border border-slate-700/80 text-xs text-slate-300 shrink-0">
         <div className="flex items-center justify-between text-white font-semibold mb-1">
-          <span className="text-[11px]">{t("centralWarehouse")}</span>
-          <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-mono">
+          <span className="text-[11px] truncate max-w-[140px]" title={systemSettings?.companyName || t("centralWarehouse")}>
+            {systemSettings?.companyName || t("centralWarehouse")}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-mono shrink-0">
             {t("warehouseStatusReady")}
           </span>
         </div>
-        <div className="text-[11px] text-slate-400">{t("warehouseAddress")}</div>
+        <div className="text-[11px] text-slate-400 line-clamp-2 leading-tight mt-0.5" title={systemSettings?.centralWarehouseAddress || t("warehouseAddress")}>
+          {systemSettings?.centralWarehouseAddress || t("warehouseAddress")}
+        </div>
         <div className="mt-2 pt-2 border-t border-slate-700/60 flex items-center justify-between text-[10px] text-slate-400 font-mono">
           <span>{t("technicalHotline")}</span>
-          <span className="text-amber-400 font-bold">1900 6868</span>
+          <span className="text-amber-400 font-bold font-mono tracking-wider">
+            {systemSettings?.hotline || "1900 6868"}
+          </span>
         </div>
       </div>
     </div>

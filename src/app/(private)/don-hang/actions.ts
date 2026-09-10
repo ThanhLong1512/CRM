@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { OrderStatus, Prisma, DealerTier } from "@prisma/client";
-import { getSessionDbUser } from "@/lib/auth";
+import { getSessionDbUser, requireRoles } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getLitersFromVolume } from "@/lib/unitConverter";
 import { resolveTierUnitPrice, calculateVolumeDiscount, type CustomerDealerTier } from "@/lib/pricingEngine";
@@ -66,9 +66,11 @@ export async function createOrder(input: {
   signature?: string;
   signedBy?: string;
 }): Promise<OrderActionResult> {
-  const { dbUser } = await getSessionDbUser();
-  if (!dbUser) {
-    return fail("Bạn cần đăng nhập để tạo đơn hàng.");
+  let dbUser;
+  try {
+    dbUser = await requireRoles(["ADMIN", "ACCOUNTANT", "SALES", "DEALER", "FLEET"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
   }
 
   const customerId = String(input.customerId ?? "").trim();
@@ -325,9 +327,15 @@ export async function updateOrderStatus(
     return fail("Thiếu mã đơn hàng.");
   }
 
-  const { dbUser } = await getSessionDbUser();
-  if (!dbUser) {
-    return fail("Bạn cần đăng nhập.");
+  let dbUser;
+  try {
+    dbUser = await requireRoles(["ADMIN", "ACCOUNTANT", "SALES", "FLEET"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
+  if (dbUser.role === "FLEET" && (nextStatus === OrderStatus.PENDING || nextStatus === OrderStatus.CONFIRMED)) {
+    return fail("Đội xe chỉ được phép cập nhật trạng thái vận chuyển (Giao hàng và Hoàn thành).");
   }
 
   try {
@@ -374,9 +382,11 @@ export async function cancelOrder(orderId: string): Promise<OrderActionResult> {
     return fail("Thiếu mã đơn hàng.");
   }
 
-  const { dbUser } = await getSessionDbUser();
-  if (!dbUser) {
-    return fail("Bạn cần đăng nhập.");
+  let dbUser;
+  try {
+    dbUser = await requireRoles(["ADMIN", "ACCOUNTANT", "SALES"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
   }
 
   try {

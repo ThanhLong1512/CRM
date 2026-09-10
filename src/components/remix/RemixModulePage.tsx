@@ -30,6 +30,8 @@ export async function RemixModulePage({
       drumStats={data.drumStats}
       rfm={data.rfm}
       staffUsers={data.staffUsers}
+      initialCreditOverrideRequests={data.creditOverrideRequests}
+      initialSystemSettings={data.systemSettings}
       sessionUser={sessionUser}
     />
   );

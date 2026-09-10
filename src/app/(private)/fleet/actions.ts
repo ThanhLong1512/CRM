@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { MeterUnit, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireRoles } from "@/lib/auth";
 
 export type FleetActionResult = {
   success: boolean;
@@ -46,6 +47,12 @@ export async function createVehicle(input: {
   intervalValue: number;
   notes?: string;
 }): Promise<FleetActionResult> {
+  try {
+    await requireRoles(["ADMIN", "FLEET"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
   const customerId = String(input.customerId ?? "").trim();
   const plateNumber = String(input.plateNumber ?? "").trim().toUpperCase();
   const label = String(input.label ?? "").trim() || null;
@@ -116,6 +123,12 @@ export async function updateVehicle(
 ): Promise<FleetActionResult> {
   if (!id) return fail("Thiếu mã xe.");
 
+  try {
+    await requireRoles(["ADMIN", "FLEET"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
   const customerId = String(input.customerId ?? "").trim();
   const plateNumber = String(input.plateNumber ?? "").trim().toUpperCase();
   const label = String(input.label ?? "").trim() || null;
@@ -166,6 +179,13 @@ export async function updateMeter(
   currentMeter: number,
 ): Promise<FleetActionResult> {
   if (!id) return fail("Thiếu mã xe.");
+
+  try {
+    await requireRoles(["ADMIN", "FLEET"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
   const meter = Number(currentMeter);
   if (!Number.isFinite(meter) || meter < 0) {
     return fail("Số meter không hợp lệ.");
@@ -196,6 +216,12 @@ export async function recordOilChange(
   meter?: number,
 ): Promise<FleetActionResult> {
   if (!id) return fail("Thiếu mã xe.");
+
+  try {
+    await requireRoles(["ADMIN", "FLEET"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
 
   try {
     const vehicle = await prisma.fleetVehicle.findUnique({ where: { id } });
@@ -231,6 +257,12 @@ export async function recordOilChange(
 
 export async function deleteVehicle(id: string): Promise<FleetActionResult> {
   if (!id) return fail("Thiếu mã xe.");
+
+  try {
+    await requireRoles(["ADMIN"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
 
   try {
     await prisma.fleetVehicle.delete({ where: { id } });

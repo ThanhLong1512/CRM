@@ -9,6 +9,10 @@ import {
   ShoppingCart,
   Layers,
   Menu,
+  ShieldAlert,
+  Truck,
+  Package,
+  QrCode,
 } from "lucide-react";
 import {
   Product,
@@ -39,8 +43,17 @@ import {
   updateProduct,
 } from "@/app/(private)/san-pham/actions";
 import { updateCustomer, createCustomer, deleteCustomer } from "@/app/(private)/khach-hang/actions";
+import {
+  requestCustomerCreditOverrideAction,
+  decideCustomerCreditOverrideAction,
+} from "@/app/(private)/khach-hang/credit-override-actions";
 import { createCheckIn } from "@/app/(private)/sales/actions";
-import { issueDrums, returnDrums, adjustDrums } from "@/app/(private)/vo-phuy/actions";
+import {
+  issueDrums,
+  returnDrums,
+  adjustDrums,
+  signDrumTransactionAction,
+} from "@/app/(private)/vo-phuy/actions";
 import {
   createVehicle,
   updateMeter,
@@ -55,7 +68,7 @@ import {
 } from "@/app/(private)/tich-diem/actions";
 import type { UserRole } from "@prisma/client";
 
-import Sidebar from "./Sidebar";
+import Sidebar, { MODULE_ALLOWED_ROLES } from "./Sidebar";
 import Header from "./Header";
 import { useTranslation } from "@/components/providers/language-provider";
 import type { AuthUserProfile } from "@/components/auth/authData";
@@ -72,6 +85,7 @@ import DebtReceiptsView from "./DebtReceiptsView";
 import StaffRBACView from "./StaffRBACView";
 import SettingsView from "./SettingsView";
 import ChatWidget from "@/components/chat/ChatWidget";
+import type { SystemSettingDto } from "@/lib/data/settings";
 
 export type RemixAppContainerProps = {
   initialModule?: NavigationModule;
@@ -84,6 +98,8 @@ export type RemixAppContainerProps = {
   drumStats: DrumStats;
   rfm: RfmOverview;
   staffUsers?: RemixStaffUser[];
+  initialCreditOverrideRequests?: CreditOverrideRequest[];
+  initialSystemSettings?: SystemSettingDto;
   sessionUser?: AuthUserProfile | null;
 };
 
@@ -161,6 +177,8 @@ export default function RemixAppContainer({
   drumStats,
   rfm: _rfm,
   staffUsers = [],
+  initialCreditOverrideRequests = [],
+  initialSystemSettings,
   sessionUser = null,
 }: RemixAppContainerProps) {
   const { t } = useTranslation();
@@ -168,18 +186,46 @@ export default function RemixAppContainer({
   const router = useRouter();
   const [, startTransition] = useTransition();
 
+  const resolvedSessionUser: AuthUserProfile =
+    sessionUser ?? DEMO_USERS[0]!;
+
+  const userPrismaRole: UserRole = (() => {
+    const raw = resolvedSessionUser.rawRole;
+    if (raw && ["ADMIN", "ACCOUNTANT", "SALES", "FLEET", "DEALER"].includes(raw as UserRole)) {
+      return raw as UserRole;
+    }
+    if (resolvedSessionUser.role === "director") return "ADMIN";
+    if (resolvedSessionUser.role === "accountant") return "ACCOUNTANT";
+    if (resolvedSessionUser.role === "fleet") return "FLEET";
+    if (resolvedSessionUser.role === "dealer") return "DEALER";
+    return "SALES";
+  })();
+
+  const defaultModuleForRole: Record<UserRole, NavigationModule> = {
+    ADMIN: "dashboard",
+    ACCOUNTANT: "dashboard",
+    SALES: "dashboard",
+    FLEET: "fleet",
+    DEALER: "kanban",
+  };
+
+  const isModulePermitted = (mod: NavigationModule): boolean => {
+    const allowed = MODULE_ALLOWED_ROLES[mod] || ["ADMIN"];
+    return allowed.includes(userPrismaRole);
+  };
+
   const getModuleFromPath = (path: string): NavigationModule => {
-    if (initialModule) return initialModule;
+    if (initialModule && isModulePermitted(initialModule)) return initialModule;
     const cleanPath = path.replace(/\/$/, "") || "/";
-    return routeModules[cleanPath] || "dashboard";
+    const mod = routeModules[cleanPath];
+    if (mod && isModulePermitted(mod)) return mod;
+    return defaultModuleForRole[userPrismaRole] || "dashboard";
   };
 
   const [currentModule, setCurrentModule] = useState<NavigationModule>(() =>
-    initialModule || getModuleFromPath(pathname || "/"),
+    getModuleFromPath(pathname || "/"),
   );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const resolvedSessionUser: AuthUserProfile =
-    sessionUser ?? DEMO_USERS[0]!;
   const [isGlobalOffline, setIsGlobalOffline] = useState(false);
 
   const [products, setProducts] = useState<Product[]>(initialProducts);
@@ -195,22 +241,10 @@ export default function RemixAppContainer({
   >(undefined);
   const [creditOverrideRequests, setCreditOverrideRequests] = useState<
     CreditOverrideRequest[]
-  >([
-    {
-      id: "COR-101",
-      customerId: "C02",
-      customerName: "Đội Xe Logistics Demo",
-      requestedBy: "Nguyễn Văn Hùng (Sales)",
-      currentDebt: 94000000,
-      creditLimit: 100000000,
-      overdueDays: 122,
-      reason:
-        "Khách đang cần 2 phuy nhớt thay gấp cho 5 xe container chạy hàng Hải Phòng, cam kết thanh toán 50 triệu vào thứ Sáu.",
-      requestedAmount: 31200000,
-      requestedAt: "08:30 Hôm nay",
-      status: "PENDING",
-    },
-  ]);
+  >(initialCreditOverrideRequests);
+  const [systemSettings, setSystemSettings] = useState<
+    SystemSettingDto | undefined
+  >(initialSystemSettings);
 
   // Sync state when props change
   useEffect(() => {
@@ -219,12 +253,18 @@ export default function RemixAppContainer({
     setOrders(initialOrders);
     setVehicles(initialVehicles);
     setDrumTransactions(initialDrumTransactions);
+    setCreditOverrideRequests(initialCreditOverrideRequests);
+    if (initialSystemSettings) {
+      setSystemSettings(initialSystemSettings);
+    }
   }, [
     initialProducts,
     initialCustomers,
     initialOrders,
     initialVehicles,
     initialDrumTransactions,
+    initialCreditOverrideRequests,
+    initialSystemSettings,
   ]);
 
   useEffect(() => {
@@ -248,6 +288,10 @@ export default function RemixAppContainer({
   };
 
   const handleSelectModule = (mod: NavigationModule) => {
+    if (!isModulePermitted(mod)) {
+      toast.error(`Tài khoản (${resolvedSessionUser.roleTitle}) không có quyền truy cập phân hệ này.`);
+      return;
+    }
     setCurrentModule(mod);
     if (mod !== "sales_pwa") setPrefilledCustomerId(undefined);
     const targetRoute = moduleRoutes[mod];
@@ -917,6 +961,19 @@ export default function RemixAppContainer({
         t.id === transactionId ? { ...t, signature, signedBy } : t,
       ),
     );
+    startTransition(async () => {
+      const result = await signDrumTransactionAction({
+        transactionId,
+        signature,
+        signedBy,
+      });
+      if (!result.success) {
+        toast.error(result.error ?? result.message);
+        return;
+      }
+      toast.success(result.message);
+      router.refresh();
+    });
   };
 
   const handleRequestCreditOverride = (
@@ -962,9 +1019,21 @@ export default function RemixAppContainer({
           : c,
       ),
     );
-    toast.success(
-      "Đã gửi yêu cầu phê duyệt vượt trần tới Ban Giám Đốc (ADMIN)!",
-    );
+
+    startTransition(async () => {
+      const result = await requestCustomerCreditOverrideAction({
+        customerId,
+        reason,
+        amount: requestedAmount,
+      });
+      if (!result.success) {
+        toast.error(result.error ?? result.message);
+        router.refresh();
+        return;
+      }
+      toast.success(result.message);
+      router.refresh();
+    });
   };
 
   const handleApproveCreditOverride = (customerId: string) => {
@@ -986,10 +1055,21 @@ export default function RemixAppContainer({
           : c,
       ),
     );
-    soundFX.playSuccess();
-    toast.success(
-      "Ban Giám Đốc đã phê duyệt vượt trần công nợ. Khách hàng đã mở khóa lên đơn!",
-    );
+
+    startTransition(async () => {
+      const result = await decideCustomerCreditOverrideAction({
+        customerId,
+        approved: true,
+      });
+      if (!result.success) {
+        toast.error(result.error ?? result.message);
+        router.refresh();
+        return;
+      }
+      soundFX.playSuccess();
+      toast.success(result.message);
+      router.refresh();
+    });
   };
 
   const handleRejectCreditOverride = (
@@ -1010,9 +1090,21 @@ export default function RemixAppContainer({
           : c,
       ),
     );
-    toast.error(
-      "Đã từ chối cấp nợ vượt trần. Yêu cầu Sales thu hồi nợ cũ trước!",
-    );
+
+    startTransition(async () => {
+      const result = await decideCustomerCreditOverrideAction({
+        customerId,
+        approved: false,
+        reason: rejectReason,
+      });
+      if (!result.success) {
+        toast.error(result.error ?? result.message);
+        router.refresh();
+        return;
+      }
+      toast.info(result.message);
+      router.refresh();
+    });
   };
 
   const handleCreateEmergencyFleetOrder = (vehicle: FleetVehicle) => {
@@ -1092,6 +1184,9 @@ export default function RemixAppContainer({
         rfmAlertCount={rfmAlertCount}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
+        systemSettings={systemSettings}
+        sessionUser={resolvedSessionUser}
+        userRole={userPrismaRole}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -1107,7 +1202,28 @@ export default function RemixAppContainer({
 
         <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 pb-24 lg:pb-8">
           <div className="mx-auto max-w-7xl">
-            {currentModule === "dashboard" && (
+            {!isModulePermitted(currentModule) ? (
+              <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-8 text-center my-8">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/20 text-rose-500 flex items-center justify-center mb-4">
+                  <ShieldAlert className="w-7 h-7" />
+                </div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Truy cập bị từ chối (403 Forbidden)</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 max-w-md mx-auto">
+                  Tài khoản của bạn (<strong>{resolvedSessionUser.name}</strong> &bull; {resolvedSessionUser.roleTitle}) không có quyền truy cập vào phân hệ <strong>{moduleTitles[currentModule] || currentModule}</strong>.
+                </p>
+                <div className="mt-6 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectModule(defaultModuleForRole[userPrismaRole])}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
+                  >
+                    Về phân hệ được phép ({moduleTitles[defaultModuleForRole[userPrismaRole]]})
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {currentModule === "dashboard" && (
               <DashboardView
                 overview={dashboard}
                 drumStats={drumStats}
@@ -1225,7 +1341,14 @@ export default function RemixAppContainer({
                 onUpdateRole={handleUpdateStaffRole}
               />
             )}
-            {currentModule === "settings" && <SettingsView />}
+            {currentModule === "settings" && (
+              <SettingsView
+                initialSettings={systemSettings}
+                onSettingsUpdated={(updated) => setSystemSettings(updated)}
+              />
+            )}
+              </>
+            )}
           </div>
         </main>
       </div>
@@ -1233,77 +1356,213 @@ export default function RemixAppContainer({
       {/* Internal Group Chat Widget */}
       <ChatWidget sessionUser={resolvedSessionUser} />
 
-      {/* Mobile Bottom Navigation Bar (Thumb-friendly 1-tap navigation for mobile field staff) */}
+      {/* Mobile Bottom Navigation Bar (Thumb-friendly 1-tap navigation for mobile staff & partners) */}
       <nav
         id="mobile-bottom-nav"
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 py-1.5 px-3 flex items-center justify-around shadow-xl select-none transition-colors"
       >
-        <button
-          type="button"
-          onClick={() => {
-            soundFX.playClick();
-            handleSelectModule("dashboard");
-          }}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
-            currentModule === "dashboard"
-              ? "text-amber-600 dark:text-amber-400 font-bold"
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
-          }`}
-        >
-          <LayoutDashboard className="size-5" />
-          <span className="text-[10px] leading-tight">{t("bottomNavOverview")}</span>
-        </button>
+        {userPrismaRole === "FLEET" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("fleet");
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentModule === "fleet"
+                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <Truck className="size-5" />
+              <span className="text-[10px] leading-tight">Đội xe</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            soundFX.playClick();
-            handleSelectModule("customers");
-          }}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
-            currentModule === "customers"
-              ? "text-amber-600 dark:text-amber-400 font-bold"
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
-          }`}
-        >
-          <Users className="size-5" />
-          <span className="text-[10px] leading-tight">{t("bottomNavCustomers")}</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("drums");
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentModule === "drums"
+                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <Package className="size-5" />
+              <span className="text-[10px] leading-tight">Vỏ phuy</span>
+            </button>
 
-        {/* Central Prominent Sales CTA Button */}
-        <button
-          type="button"
-          onClick={() => {
-            soundFX.playClick();
-            handleSelectModule("sales_pwa");
-          }}
-          className="flex flex-col items-center -mt-5 cursor-pointer"
-          title="Lên đơn bán hàng thực địa"
-        >
-          <div className="size-12 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg ring-4 ring-white dark:ring-slate-900 active:scale-95 transition-all">
-            <ShoppingCart className="size-5" />
-          </div>
-          <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 mt-0.5">{t("bottomNavOrderNow")}</span>
-        </button>
+            {/* Central Prominent Fleet Trip CTA Button */}
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("kanban");
+              }}
+              className="flex flex-col items-center -mt-5 cursor-pointer"
+              title="Xem đơn hàng vận chuyển"
+            >
+              <div className="size-12 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg ring-4 ring-white dark:ring-slate-900 active:scale-95 transition-all">
+                <ShoppingCart className="size-5" />
+              </div>
+              <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 mt-0.5">Giao vận</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            soundFX.playClick();
-            handleSelectModule("kanban");
-          }}
-          className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl relative transition-all cursor-pointer ${
-            currentModule === "kanban"
-              ? "text-amber-600 dark:text-amber-400 font-bold"
-              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
-          }`}
-        >
-          <Layers className="size-5" />
-          <span className="text-[10px] leading-tight">{t("bottomNavOrders")}</span>
-          {pendingOrdersCount > 0 && (
-            <span className="absolute top-0 right-1 size-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
-          )}
-        </button>
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("products");
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentModule === "products"
+                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <Layers className="size-5" />
+              <span className="text-[10px] leading-tight">Tra nhớt</span>
+            </button>
+          </>
+        ) : userPrismaRole === "DEALER" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("kanban");
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentModule === "kanban"
+                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <ShoppingCart className="size-5" />
+              <span className="text-[10px] leading-tight">Đơn hàng</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("products");
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentModule === "products"
+                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <Layers className="size-5" />
+              <span className="text-[10px] leading-tight">Sản phẩm</span>
+            </button>
+
+            {/* Central Prominent Dealer Loyalty QR Scan Button */}
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("loyalty_qr");
+              }}
+              className="flex flex-col items-center -mt-5 cursor-pointer"
+              title="Quét mã tích điểm thợ"
+            >
+              <div className="size-12 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg ring-4 ring-white dark:ring-slate-900 active:scale-95 transition-all">
+                <QrCode className="size-5" />
+              </div>
+              <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 mt-0.5">Tích điểm</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("drums");
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentModule === "drums"
+                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <Package className="size-5" />
+              <span className="text-[10px] leading-tight">Vỏ phuy</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("dashboard");
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentModule === "dashboard"
+                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <LayoutDashboard className="size-5" />
+              <span className="text-[10px] leading-tight">{t("bottomNavOverview")}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("customers");
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
+                currentModule === "customers"
+                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <Users className="size-5" />
+              <span className="text-[10px] leading-tight">{t("bottomNavCustomers")}</span>
+            </button>
+
+            {/* Central Prominent Sales CTA Button */}
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("sales_pwa");
+              }}
+              className="flex flex-col items-center -mt-5 cursor-pointer"
+              title="Lên đơn bán hàng thực địa"
+            >
+              <div className="size-12 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg ring-4 ring-white dark:ring-slate-900 active:scale-95 transition-all">
+                <ShoppingCart className="size-5" />
+              </div>
+              <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 mt-0.5">{t("bottomNavOrderNow")}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundFX.playClick();
+                handleSelectModule("kanban");
+              }}
+              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl relative transition-all cursor-pointer ${
+                currentModule === "kanban"
+                  ? "text-amber-600 dark:text-amber-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <Layers className="size-5" />
+              <span className="text-[10px] leading-tight">{t("bottomNavOrders")}</span>
+              {pendingOrdersCount > 0 && (
+                <span className="absolute top-0 right-1 size-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
+              )}
+            </button>
+          </>
+        )}
 
         <button
           type="button"

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect } from 'react';
 import { Product, Customer } from '../../types';
-import { formatVND } from '../../mockData';
+import { formatVND } from '@/lib/remix/mappers';
 import { soundFX } from '../../utils/audio';
 import {
   Search,

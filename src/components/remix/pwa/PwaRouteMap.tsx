@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Customer } from '../../types';
-import { calculateHaversineDistance, formatVND } from '../../mockData';
+import { calculateHaversineDistance } from '@/lib/geo';
+import { formatVND } from '@/lib/remix/mappers';
 import { CHECK_IN_MAX_DISTANCE_M } from '@/lib/geo';
 import {
   formatVisitDateLabel,

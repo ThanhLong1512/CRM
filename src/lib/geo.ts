@@ -25,3 +25,5 @@ export function haversineMeters(
 
 /** Max distance for field sales check-in (parking / GPS error friendly). */
 export const CHECK_IN_MAX_DISTANCE_M = 200;
+
+export const calculateHaversineDistance = haversineMeters;

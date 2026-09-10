@@ -207,9 +207,9 @@ const staffUsers: Array<{
   role: UserRole;
 }> = [
   {
-    email: "sales.anv@remixoil.vn",
-    name: "Nguyễn Văn A",
-    role: "SALES",
+    email: "admin.thang@remixoil.vn",
+    name: "Trần Hữu Thắng",
+    role: "ADMIN",
   },
   {
     email: "ketoan.btt@remixoil.vn",
@@ -217,9 +217,19 @@ const staffUsers: Array<{
     role: "ACCOUNTANT",
   },
   {
-    email: "admin.thang@remixoil.vn",
-    name: "Trần Hữu Thắng",
-    role: "ADMIN",
+    email: "sales.anv@remixoil.vn",
+    name: "Nguyễn Văn A",
+    role: "SALES",
+  },
+  {
+    email: "fleet.doixe@remixoil.vn",
+    name: "Lê Hoàng Đội Xe",
+    role: "FLEET",
+  },
+  {
+    email: "dealer.garage@remixoil.vn",
+    name: "Garage Hoàng Phát (Đại Lý)",
+    role: "DEALER",
   },
   {
     email: "seed-drums@local.dev",

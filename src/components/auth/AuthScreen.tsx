@@ -505,11 +505,13 @@ export default function AuthScreen({
                 <label className="mb-1.5 block text-xs font-bold text-slate-300">
                   Vai trò đăng ký
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5">
                   {(
                     [
                       ["sales", "Sales Thực Địa"],
                       ["accountant", "Kế Toán Kho"],
+                      ["fleet", "Đội Xe / Vận Tải"],
+                      ["dealer", "Đại Lý Cấp 1"],
                       ["director", "Ban Quản Lý"],
                     ] as const
                   ).map(([value, label]) => (
@@ -517,10 +519,10 @@ export default function AuthScreen({
                       key={value}
                       type="button"
                       onClick={() => setRegRole(value)}
-                      className={`cursor-pointer rounded-xl border px-2 py-2 text-[11px] font-bold ${
+                      className={`cursor-pointer rounded-xl border px-2 py-2 text-[10.5px] font-bold ${
                         regRole === value
-                          ? "border-amber-500 bg-amber-500/20 text-amber-200"
-                          : "border-slate-700 bg-slate-950 text-slate-400"
+                          ? "border-amber-500 bg-amber-500/20 text-amber-200 shadow-sm"
+                          : "border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600 hover:text-slate-200"
                       }`}
                     >
                       {label}

@@ -379,3 +379,25 @@ model ApprovalRequest {
   @@index([status])
   @@index([requesterId])
 }
+
+model SystemSetting {
+  id                         String   @id @default("default")
+  companyName                String   @default("Công Ty TNHH Phân Phối Dầu Nhớt Remix Petro")
+  hotline                    String   @default("1900 6868")
+  centralWarehouseAddress    String   @default("Kho Tổng QL1A, Huyện Bình Chánh, TP. Hồ Chí Minh")
+  vatRatePercent             Float    @default(8)
+  geofenceRadiusMeters       Int      @default(50)
+  gpsAccuracyThresholdMeters Int      @default(30)
+  requirePhotoAtCheckin      Boolean  @default(true)
+  defaultCreditLimit         Decimal  @default(100000000) @db.Decimal(14, 2)
+  overdueWarningDays         Int      @default(30)
+  creditLockOverdueDays      Int      @default(45)
+  drumDepositPrice           Decimal  @default(400000) @db.Decimal(14, 2)
+  maxDrumHoldDays            Int      @default(45)
+  loyaltyPointConversionRate Decimal  @default(10000) @db.Decimal(14, 2)
+  rewardPointsPerDrum        Int      @default(20)
+  offlineAutoSyncIntervalMin Int      @default(5)
+  updatedBy                  String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}

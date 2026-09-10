@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, FormEvent, MouseEvent, TouchEvent, useMemo } from 'react';
 import { Customer, DrumTransaction } from '../types';
-import { formatVND } from '../mockData';
+import { formatVND } from '@/lib/remix/mappers';
 import { soundFX } from '../utils/audio';
 import {
   Package,

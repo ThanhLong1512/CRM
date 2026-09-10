@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 import { useState } from 'react';
 import { Product } from '../../types';
-import { formatVND } from '../../mockData';
+import { formatVND } from '@/lib/remix/mappers';
 import { soundFX } from '../../utils/audio';
 import { X, Delete, Check } from 'lucide-react';
 

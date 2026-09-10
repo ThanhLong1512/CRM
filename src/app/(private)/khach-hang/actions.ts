@@ -7,6 +7,7 @@ import {
   type VisitDayOfWeek,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireRoles } from "@/lib/auth";
 
 export type CustomerActionResult = {
   success: boolean;
@@ -141,6 +142,12 @@ function ok(message: string): CustomerActionResult {
 export async function createCustomer(
   formData: FormData,
 ): Promise<CustomerActionResult> {
+  try {
+    await requireRoles(["ADMIN", "ACCOUNTANT", "SALES"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
   const parsed = parseCustomerFormData(formData);
   if ("error" in parsed) {
     return fail(parsed.error);
@@ -162,6 +169,12 @@ export async function updateCustomer(
 ): Promise<CustomerActionResult> {
   if (!id) {
     return fail("Thiếu mã khách hàng.");
+  }
+
+  try {
+    await requireRoles(["ADMIN", "ACCOUNTANT", "SALES"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
   }
 
   const parsed = parseCustomerFormData(formData);
@@ -190,6 +203,12 @@ export async function deleteCustomer(
   }
 
   try {
+    await requireRoles(["ADMIN"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
+  }
+
+  try {
     await prisma.customer.delete({ where: { id } });
   } catch (error) {
     return fail(mapPrismaError(error));
@@ -205,6 +224,12 @@ export async function updateCustomerVisitDays(
 ): Promise<CustomerActionResult> {
   if (!customerId) {
     return fail("Thiếu mã khách hàng.");
+  }
+
+  try {
+    await requireRoles(["ADMIN", "SALES"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
   }
 
   try {

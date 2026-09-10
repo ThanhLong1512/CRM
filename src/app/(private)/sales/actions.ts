@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { CHECK_IN_MAX_DISTANCE_M, haversineMeters } from "@/lib/geo";
-import { getSessionDbUser } from "@/lib/auth";
+import { getSessionDbUser, requireRoles } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export type CheckInActionResult = {
@@ -37,9 +37,11 @@ export async function createCheckIn(input: {
   lat: number;
   lng: number;
 }): Promise<CheckInActionResult> {
-  const { dbUser } = await getSessionDbUser();
-  if (!dbUser) {
-    return fail("Bạn cần đăng nhập để check-in.");
+  let dbUser;
+  try {
+    dbUser = await requireRoles(["ADMIN", "SALES"]);
+  } catch (authErr: any) {
+    return fail(authErr.message);
   }
 
   const customerId = String(input.customerId ?? "").trim();
