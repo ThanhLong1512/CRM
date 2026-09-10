@@ -61,6 +61,12 @@ enum PaymentMethod {
   BANK_TRANSFER
 }
 
+enum DebtPaymentStatus {
+  PENDING
+  APPROVED
+  CANCELLED
+}
+
 enum VisitDayOfWeek {
   T2
   T3
@@ -82,6 +88,33 @@ model User {
   checkIns         VisitCheckIn[]
   drumTransactions DrumTransaction[]
   debtPayments     DebtPayment[]
+  chatMessages     ChatMessage[]
+  chatReadStatus   ChatReadStatus[]
+  approvalRequestsRequested ApprovalRequest[] @relation("ApprovalRequester")
+  approvalRequestsActed     ApprovalRequest[] @relation("ApprovalActor")
+}
+
+/// Group chat messages visible to all users in the system
+model ChatMessage {
+  id        String   @id @default(cuid())
+  content   String
+  imageUrl  String?
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([senderId])
+}
+
+/// Tracks per-user last-read timestamp for the group chat channel
+model ChatReadStatus {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Product {
@@ -182,16 +215,25 @@ model CustomerVisitPlan {
 }
 
 model DebtPayment {
-  id            String        @id @default(cuid())
-  receiptNumber String        @unique
+  id            String            @id @default(cuid())
+  receiptNumber String            @unique
   customerId    String
-  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  amount        Decimal       @db.Decimal(14, 2)
-  method        PaymentMethod @default(CASH)
+  customer      Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  amount        Decimal           @db.Decimal(14, 2)
+  method        PaymentMethod     @default(CASH)
   notes         String?
+  status        DebtPaymentStatus @default(PENDING)
+  approvedBy    String?
+  approvedAt    DateTime?
+  cancelledBy   String?
+  cancelledAt   DateTime?
+  cancelReason  String?
   userId        String
-  user          User          @relation(fields: [userId], references: [id])
-  createdAt     DateTime      @default(now())
+  user          User              @relation(fields: [userId], references: [id])
+  createdAt     DateTime          @default(now())
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 model DrumTransaction {
@@ -293,4 +335,47 @@ model RewardRedemption {
   reward      LoyaltyReward @relation(fields: [rewardId], references: [id])
   pointsSpent Int
   createdAt   DateTime      @default(now())
+}
+
+enum ApprovalTargetType {
+  DEBT_RECEIPT            // Phiếu thu nợ
+  ORDER_CREDIT_OVERRIDE   // Đơn vượt hạn mức nợ
+  SPECIAL_DISCOUNT        // Chiết khấu đơn hàng
+  DRUM_ADJUSTMENT         // Điều chỉnh cọc / vỏ phuy
+  CREDIT_LIMIT_CHANGE     // Nâng hạn mức công nợ
+}
+
+enum ApprovalStatus {
+  PENDING    // Đang chờ duyệt
+  APPROVED   // Đã phê duyệt
+  REJECTED   // Đã từ chối
+  CANCELLED  // Người lập tự hủy
+}
+
+model ApprovalRequest {
+  id              String             @id @default(cuid())
+  targetType      ApprovalTargetType
+  targetId        String             // ID bản ghi gốc
+  targetCode      String             // Mã hiển thị (PT-..., ORD-...)
+  title           String             // Tiêu đề tóm tắt
+  summary         String?            // Chi tiết ngắn gọn
+  amount          Decimal?           @db.Decimal(14, 2)
+  metadata        Json?              // Dữ liệu mở rộng
+  
+  requiredRole    String             @default("ADMIN") // ADMIN | ACCOUNTANT
+  requesterId     String
+  requester       User               @relation("ApprovalRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  
+  status          ApprovalStatus     @default(PENDING)
+  decisionReason  String?
+  actionBy        String?
+  actionUser      User?              @relation("ApprovalActor", fields: [actionBy], references: [id], onDelete: SetNull)
+  actionAt        DateTime?
+  
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@index([requesterId])
 }

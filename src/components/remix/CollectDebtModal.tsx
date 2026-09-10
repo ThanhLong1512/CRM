@@ -73,7 +73,8 @@ export default function CollectDebtModal({
       : 0;
 
   const handleQuickAmount = (ratio: number) => {
-    const val = Math.round(currentDebt * ratio);
+    if (ratio >= 1) return; // không cho “thu hết” một chạm
+    const val = Math.min(Math.round(currentDebt * ratio), currentDebt);
     setAmount(val);
   };
 
@@ -81,6 +82,12 @@ export default function CollectDebtModal({
     e.preventDefault();
     if (numAmount <= 0) {
       toast.error("Vui lòng nhập số tiền thu lớn hơn 0đ.");
+      return;
+    }
+    if (numAmount > currentDebt) {
+      toast.error(
+        `Số tiền thu không được vượt dư nợ (${formatVND(currentDebt)}).`,
+      );
       return;
     }
 
@@ -204,6 +211,12 @@ export default function CollectDebtModal({
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === "create" ? (
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[11px] text-amber-900 font-medium leading-relaxed">
+                Phiếu tạo xong ở trạng thái <strong>chờ duyệt</strong>. Công nợ
+                chỉ giảm sau khi <strong>Kế toán / Admin</strong> duyệt trên sổ
+                phiếu thu.
+              </div>
+
               {/* Payment Method Selector */}
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
@@ -249,14 +262,18 @@ export default function CollectDebtModal({
                 </div>
                 <div className="relative">
                   <input
-                    type="number"
-                    min="1000"
-                    step="1000"
+                    type="text"
                     required
-                    value={amount}
-                    onChange={(e) =>
-                      setAmount(e.target.value === "" ? "" : Number(e.target.value))
-                    }
+                    value={amount !== "" && typeof amount === "number" ? amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : ""}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, "");
+                      if (!raw) {
+                        setAmount("");
+                        return;
+                      }
+                      const next = Number(raw);
+                      setAmount(Number.isFinite(next) ? Math.min(next, currentDebt) : "");
+                    }}
                     placeholder="VD: 15.000.000"
                     className="w-full rounded-2xl border border-slate-300 bg-slate-50/50 py-3 pr-4 pl-10 font-mono text-base font-bold text-slate-900 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   />
@@ -268,13 +285,6 @@ export default function CollectDebtModal({
                   <span className="text-[11px] font-semibold text-slate-400">Chọn nhanh:</span>
                   <button
                     type="button"
-                    onClick={() => handleQuickAmount(1)}
-                    className="cursor-pointer rounded-lg border border-emerald-200 bg-emerald-50/80 px-2.5 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100"
-                  >
-                    Thu hết 100%
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => handleQuickAmount(0.5)}
                     className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                   >
@@ -282,14 +292,18 @@ export default function CollectDebtModal({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAmount(10000000)}
+                    onClick={() =>
+                      setAmount(Math.min(10_000_000, currentDebt))
+                    }
                     className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                   >
                     10 Tr
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAmount(20000000)}
+                    onClick={() =>
+                      setAmount(Math.min(20_000_000, currentDebt))
+                    }
                     className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                   >
                     20 Tr
@@ -313,20 +327,20 @@ export default function CollectDebtModal({
 
               {/* Preview Box */}
               {numAmount > 0 && (
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3.5 space-y-2">
+                <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-3.5 space-y-2">
                   <div className="flex items-center justify-between text-xs text-slate-700">
                     <span className="flex items-center gap-1 font-semibold">
-                      <TrendingDown className="size-3.5 text-emerald-600" />
-                      Dư nợ sau khi gạch thu:
+                      <TrendingDown className="size-3.5 text-amber-600" />
+                      Dư nợ dự kiến sau khi duyệt:
                     </span>
                     <span className="font-mono font-black text-slate-900">
                       {formatVND(remainingDebt)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <span>Tỷ lệ sử dụng hạn mức mới:</span>
-                    <span className="font-bold text-emerald-700">
-                      {utilizationAfter}% (Khả dụng: {formatVND(Math.max(0, customer.creditLimit - remainingDebt))})
+                    <span>Chưa trừ nợ ngay — chờ duyệt</span>
+                    <span className="font-bold text-amber-800">
+                      {utilizationAfter}% HM sau duyệt
                     </span>
                   </div>
                 </div>
@@ -336,11 +350,18 @@ export default function CollectDebtModal({
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={isPending || numAmount <= 0}
+                  disabled={
+                    isPending ||
+                    numAmount <= 0 ||
+                    numAmount > currentDebt ||
+                    currentDebt <= 0
+                  }
                   className="w-full cursor-pointer flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   <Receipt className="size-4" />
-                  {isPending ? "Đang xử lý tạo phiếu thu..." : `Xác Nhận Thu ${formatVND(numAmount)}`}
+                  {isPending
+                    ? "Đang lập phiếu..."
+                    : `Lập phiếu chờ duyệt ${formatVND(numAmount)}`}
                 </button>
               </div>
             </form>
@@ -357,15 +378,34 @@ export default function CollectDebtModal({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {history.map((item) => (
+                  {history.map((item) => {
+                    const status = item.status || "APPROVED";
+                    const statusClass =
+                      status === "PENDING"
+                        ? "bg-amber-100 text-amber-900"
+                        : status === "CANCELLED"
+                          ? "bg-slate-200 text-slate-600"
+                          : "bg-emerald-100 text-emerald-800";
+                    const statusLabel =
+                      status === "PENDING"
+                        ? "Chờ duyệt"
+                        : status === "CANCELLED"
+                          ? "Đã hủy"
+                          : "Đã duyệt";
+                    return (
                     <div
                       key={item.id}
                       className="rounded-2xl border border-slate-200 bg-slate-50/50 p-3.5 text-xs flex items-center justify-between gap-3 hover:bg-white transition"
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md text-[11px]">
                             {item.receiptNumber}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${statusClass}`}
+                          >
+                            {statusLabel}
                           </span>
                           <span className="text-[11px] text-slate-400">
                             {new Date(item.createdAt).toLocaleDateString("vi-VN", {
@@ -391,11 +431,16 @@ export default function CollectDebtModal({
                         </div>
                         <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1 mt-0.5">
                           <ShieldCheck className="size-3 text-emerald-600" />
-                          Đã hạch toán
+                          {status === "APPROVED"
+                            ? "Đã trừ nợ"
+                            : status === "PENDING"
+                              ? "Chưa trừ nợ"
+                              : "Đã hủy"}
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

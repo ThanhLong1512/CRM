@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, type FormEvent } from "react";
 import { Customer, CustomerType } from "../types";
-import { formatVND } from "@/lib/remix/mappers";
+import { formatMoney, formatVND } from "@/lib/remix/mappers";
 import {
   Users,
   Search,
@@ -788,18 +788,30 @@ export default function CustomersView({
                   <label className="mb-1 block text-xs font-semibold text-slate-700">
                     Hạn mức nợ (VNĐ)
                   </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.creditLimit}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        creditLimit: Number(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-xs font-bold"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={
+                        form.creditLimit > 0
+                          ? formatMoney(form.creditLimit)
+                          : form.creditLimit === 0
+                          ? "0"
+                          : ""
+                      }
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9]/g, "");
+                        setForm({
+                          ...form,
+                          creditLimit: raw ? Number(raw) : 0,
+                        });
+                      }}
+                      placeholder="0"
+                      className="w-full rounded-xl border border-slate-200 py-2 pl-3 pr-10 font-mono text-xs font-bold focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/20"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] font-semibold text-slate-400">
+                      đ
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-700">
@@ -881,28 +893,119 @@ export default function CustomersView({
       {editingCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-            <h4 className="text-base font-bold text-slate-900">
-              Điều chỉnh hạn mức — {editingCustomer.name}
-            </h4>
-            <input
-              type="number"
-              min={0}
-              value={newLimitInput}
-              onChange={(e) => setNewLimitInput(Number(e.target.value))}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-sm font-bold"
-            />
-            <div className="flex justify-end gap-2">
+            <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+              <div>
+                <h4 className="text-base font-bold text-slate-900">
+                  Điều chỉnh hạn mức công nợ
+                </h4>
+                <p className="text-xs font-medium text-slate-500 mt-0.5">
+                  Khách hàng: <span className="font-semibold text-slate-800">{editingCustomer.name}</span>
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setEditingCustomer(null)}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold"
+                className="cursor-pointer rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Thống kê công nợ hiện tại */}
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 text-xs border border-slate-100">
+              <div>
+                <span className="text-slate-500 block">Dư nợ hiện tại:</span>
+                <span className="font-mono font-bold text-rose-600 text-sm">
+                  {formatVND(editingCustomer.currentDebt)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Hạn mức hiện tại:</span>
+                <span className="font-mono font-bold text-slate-800 text-sm">
+                  {formatVND(editingCustomer.creditLimit)}
+                </span>
+              </div>
+            </div>
+
+            {/* Input hạn mức mới có format tiền tệ */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Hạn mức nợ mới (VNĐ)
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  autoFocus
+                  value={
+                    newLimitInput > 0
+                      ? formatMoney(newLimitInput)
+                      : newLimitInput === 0
+                      ? "0"
+                      : ""
+                  }
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9]/g, "");
+                    setNewLimitInput(raw ? Number(raw) : 0);
+                  }}
+                  placeholder="VD: 50.000.000"
+                  className="w-full rounded-xl border border-slate-300 py-2.5 pl-3.5 pr-14 font-mono text-base font-bold text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 font-mono text-xs font-bold text-slate-400">
+                  VNĐ
+                </span>
+              </div>
+            </div>
+
+            {/* Phím chọn nhanh */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-semibold text-slate-400 block">Gợi ý chọn nhanh:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {[10_000_000, 20_000_000, 50_000_000, 100_000_000, 200_000_000].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setNewLimitInput(val)}
+                    className={`cursor-pointer rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
+                      newLimitInput === val
+                        ? "border-amber-500 bg-amber-50 text-amber-900 font-bold"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {val / 1_000_000} Tr
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setNewLimitInput((prev) => prev + 10_000_000)}
+                  className="cursor-pointer rounded-lg border border-dashed border-amber-300 bg-amber-50/50 px-2.5 py-1 text-xs font-bold text-amber-700 hover:bg-amber-100/50 transition"
+                >
+                  +10 Tr
+                </button>
+              </div>
+            </div>
+
+            {/* Cảnh báo nếu hạn mức mới < dư nợ */}
+            {newLimitInput < (editingCustomer.currentDebt || 0) && (
+              <div className="flex items-start gap-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-900 border border-amber-200">
+                <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Hạn mức mới nhỏ hơn dư nợ hiện tại ({formatVND(editingCustomer.currentDebt)}). Hệ thống sẽ cảnh báo/khóa đơn tiếp theo của khách hàng này.
+                </span>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEditingCustomer(null)}
+                className="cursor-pointer rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
               >
                 Hủy
               </button>
               <button
                 type="button"
                 onClick={handleSaveLimit}
-                className="rounded-xl bg-amber-500 px-5 py-2 text-xs font-bold text-slate-950"
+                className="cursor-pointer rounded-xl bg-amber-500 px-5 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 transition shadow-xs"
               >
                 Lưu hạn mức
               </button>

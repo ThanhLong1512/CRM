@@ -43,11 +43,7 @@ type LineDraft = {
   quantity: number;
 };
 
-const vndFormatter = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-  maximumFractionDigits: 0,
-});
+import { vndFormatter } from "@/lib/formatMoney";
 
 function newLine(): LineDraft {
   return {

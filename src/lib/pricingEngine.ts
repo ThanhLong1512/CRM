@@ -1,4 +1,5 @@
 import { LUBE_VOLUMES, getLitersFromVolume } from './unitConverter';
+import { formatVND } from './formatMoney';
 
 export type CustomerDealerTier = 'GOLD' | 'SILVER' | 'RETAIL';
 
@@ -115,21 +116,21 @@ export function calculateVolumeDiscount(
   if (drumCount >= 2) {
     const drumDisc = Math.round(drumSubtotal * 0.05);
     autoDiscountAmount += drumDisc;
-    appliedRules.push(`Đạt mốc ${drumCount} phuy (≥2 phuy): Tự động giảm 5% (${drumDisc.toLocaleString('vi-VN')} đ)`);
+    appliedRules.push(`Đạt mốc ${drumCount} phuy (≥2 phuy): Tự động giảm 5% (${formatVND(drumDisc)})`);
   }
 
   // Rule: >= 5 Xô/Thùng 18L -> 3% on pail subtotal
   if (pailCount >= 5) {
     const pailDisc = Math.round(pailSubtotal * 0.03);
     autoDiscountAmount += pailDisc;
-    appliedRules.push(`Đạt mốc ${pailCount} xô (≥5 xô): Tự động giảm 3% (${pailDisc.toLocaleString('vi-VN')} đ)`);
+    appliedRules.push(`Đạt mốc ${pailCount} xô (≥5 xô): Tự động giảm 3% (${formatVND(pailDisc)})`);
   }
 
   // If customer Tier is GOLD, grant an extra 1% enterprise bonus on entire order
   if (customerTier === 'GOLD' && (drumCount > 0 || pailCount > 0)) {
     const goldBonus = Math.round(rawSubtotal * 0.01);
     autoDiscountAmount += goldBonus;
-    appliedRules.push(`Ưu đãi Đại lý Vàng (Gold Partner): Thêm 1% (${goldBonus.toLocaleString('vi-VN')} đ)`);
+    appliedRules.push(`Ưu đãi Đại lý Vàng (Gold Partner): Thêm 1% (${formatVND(goldBonus)})`);
   }
 
   // Manual discount overlay if higher

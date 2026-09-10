@@ -42,10 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const vndFormatter = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-});
+import { vndFormatter } from "@/lib/formatMoney";
 
 export function CustomersPageClient() {
   const [query, setQuery] = useState("");

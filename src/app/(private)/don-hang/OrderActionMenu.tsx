@@ -38,10 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const vndFormatter = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-});
+import { vndFormatter } from "@/lib/formatMoney";
 
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   PENDING: "CONFIRMED",

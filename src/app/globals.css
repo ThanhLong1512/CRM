@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -51,6 +51,7 @@
 
 /* Prototype palette: slate canvas + amber industrial accent */
 :root {
+  color-scheme: light;
   --background: #f8fafc;
   --foreground: #0f172a;
   --card: #ffffff;
@@ -86,11 +87,12 @@
 }
 
 .dark {
-  --background: #0f172a;
+  color-scheme: dark;
+  --background: #090d16;
   --foreground: #f8fafc;
-  --card: #1e293b;
+  --card: #111827;
   --card-foreground: #f8fafc;
-  --popover: #1e293b;
+  --popover: #111827;
   --popover-foreground: #f8fafc;
   --primary: #f59e0b;
   --primary-foreground: #0f172a;
@@ -98,11 +100,11 @@
   --secondary-foreground: #f8fafc;
   --muted: #1e293b;
   --muted-foreground: #94a3b8;
-  --accent: #334155;
-  --accent-foreground: #f8fafc;
+  --accent: #1e293b;
+  --accent-foreground: #fbbf24;
   --destructive: #fb7185;
-  --border: rgb(255 255 255 / 10%);
-  --input: rgb(255 255 255 / 15%);
+  --border: #1e293b;
+  --input: #1e293b;
   --ring: #f59e0b;
   --chart-1: #38bdf8;
   --chart-2: #fbbf24;
@@ -142,6 +144,65 @@
   }
 }
 
+/* Zero-specificity dark mode fallbacks for existing static slate/white classes */
+:where(.dark) :where(.bg-white) {
+  background-color: #111827;
+}
+
+:where(.dark) :where(.bg-slate-50) {
+  background-color: #0b1120;
+}
+
+:where(.dark) :where(.bg-slate-100) {
+  background-color: #1e293b;
+}
+
+:where(.dark) :where(.border-slate-200, .border-slate-300) {
+  border-color: #1e293b;
+}
+
+:where(.dark) :where(.border-slate-100) {
+  border-color: #172033;
+}
+
+:where(.dark) :where(.text-slate-900, .text-slate-800) {
+  color: #f8fafc;
+}
+
+:where(.dark) :where(.text-slate-700) {
+  color: #e2e8f0;
+}
+
+:where(.dark) :where(.text-slate-600) {
+  color: #cbd5e1;
+}
+
+:where(.dark) :where(.text-slate-500) {
+  color: #94a3b8;
+}
+
+:where(.dark) :where(.hover\:bg-slate-50:hover) {
+  background-color: #1e293b;
+}
+
+:where(.dark) :where(.hover\:bg-slate-100:hover) {
+  background-color: #334155;
+}
+
+:where(.dark) :where(.divide-slate-200 > :not([hidden]) ~ :not([hidden])) {
+  border-color: #1e293b;
+}
+
+:where(.dark) :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+:where(.dark) :where(input:not([type="checkbox"]):not([type="radio"])::placeholder, textarea::placeholder) {
+  color: #64748b;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -158,6 +219,18 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 /* Hide Next.js dev indicator / Turbopack 'N' button in development */

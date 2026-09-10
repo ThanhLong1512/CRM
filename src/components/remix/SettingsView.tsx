@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useState, FormEvent } from 'react';
 import {
   Settings,
@@ -12,11 +12,23 @@ import {
   CheckCircle2,
   RefreshCw,
   Percent,
+  Palette,
+  Sun,
+  Moon,
+  Laptop,
+  Check,
+  Globe,
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import { useTranslation } from '@/components/providers/language-provider';
+import { SUPPORTED_LANGUAGES } from '@/lib/i18n/translations';
+import { soundFX } from '@/components/utils/audio';
 import { formatVND } from '../mockData';
 
 export default function SettingsView() {
-  const [activeTab, setActiveTab] = useState<'general' | 'geofence' | 'credit' | 'drums' | 'loyalty' | 'offline'>('general');
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { language, setLanguage, t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<'general' | 'geofence' | 'credit' | 'drums' | 'loyalty' | 'offline' | 'appearance'>('general');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Configuration state
@@ -77,6 +89,7 @@ export default function SettingsView() {
           { id: 'drums', label: 'Vỏ Phuy 200L', icon: Package },
           { id: 'loyalty', label: 'Tích Điểm Thợ Máy', icon: Coins },
           { id: 'offline', label: 'Offline-First & Bộ Nhớ', icon: Database },
+          { id: 'appearance', label: 'Giao Diện & Ngôn Ngữ', icon: Palette },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -361,6 +374,170 @@ export default function SettingsView() {
                   onChange={(e) => setConfig({ ...config, offlineAutoSyncIntervalMin: Number(e.target.value) })}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:border-amber-500 font-mono font-bold"
                 />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 7: Appearance & Dark Mode */}
+        {activeTab === 'appearance' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                Giao Diện & Chế Độ Hiển Thị (Dark Mode)
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Tùy chỉnh phong cách hiển thị sáng hoặc tối để tối ưu khả năng quan sát và bảo vệ mắt khi làm việc ban đêm hoặc thực địa.
+              </p>
+            </div>
+
+            {/* Theme Select Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                {
+                  id: 'light',
+                  label: 'Chế độ Sáng (Light)',
+                  desc: 'Nền slate thanh lịch, độ tương phản cao, tối ưu khi làm việc nơi có ánh sáng mặt trời mạnh',
+                  icon: Sun,
+                  accent: 'border-amber-500 bg-amber-500/10 text-amber-600',
+                  previewBg: 'bg-[#f8fafc] text-slate-900 border-slate-200',
+                },
+                {
+                  id: 'dark',
+                  label: 'Chế độ Tối (Dark)',
+                  desc: 'Nền than tối cao cấp, chống mỏi mắt, tiết kiệm pin cho điện thoại và máy tính bảng thực địa',
+                  icon: Moon,
+                  accent: 'border-indigo-500 bg-indigo-500/10 text-indigo-400',
+                  previewBg: 'bg-[#090d16] text-slate-100 border-slate-800',
+                },
+                {
+                  id: 'system',
+                  label: 'Theo Hệ Thống (Auto)',
+                  desc: 'Tự động đồng bộ giao diện theo cài đặt sáng/tối của hệ điều hành thiết bị',
+                  icon: Laptop,
+                  accent: 'border-sky-500 bg-sky-500/10 text-sky-500',
+                  previewBg: 'bg-gradient-to-r from-[#f8fafc] to-[#090d16] text-slate-800 border-slate-400',
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                const isSelected = theme === item.id;
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      soundFX.playClick();
+                      setTheme(item.id);
+                    }}
+                    className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-500/5 shadow-md shadow-amber-500/10 dark:bg-amber-950/20'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className={`p-2 rounded-xl ${item.accent}`}>
+                          <Icon className="size-5" />
+                        </div>
+                        {isSelected && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full">
+                            <Check className="size-3" /> Đang dùng
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{item.label}</h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{item.desc}</p>
+                    </div>
+
+                    {/* Mini Visual Preview Mockup */}
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                      <div className={`p-2 rounded-lg border text-[10px] font-mono flex items-center justify-between ${item.previewBg}`}>
+                        <span>Aa Demo Giao diện</span>
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-bold text-[9px]">Dầu nhớt</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Live Palette Token Visualizer */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Bảng màu trực quan đang áp dụng ({resolvedTheme === 'dark' ? 'Dark Mode' : 'Light Mode'})
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
+                  NextThemes Active
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
+                <div className="p-2.5 rounded-xl bg-background border border-border text-foreground flex flex-col justify-between">
+                  <span className="text-[9px] text-muted-foreground">Background</span>
+                  <span className="font-bold mt-1 truncate">var(--background)</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-card border border-border text-card-foreground flex flex-col justify-between">
+                  <span className="text-[9px] text-muted-foreground">Card Surface</span>
+                  <span className="font-bold mt-1 truncate">var(--card)</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 flex flex-col justify-between shadow-xs">
+                  <span className="text-[9px] opacity-80">Primary Accent</span>
+                  <span className="font-bold mt-1 truncate">Amber #F59E0B</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-muted border border-border text-muted-foreground flex flex-col justify-between">
+                  <span className="text-[9px]">Muted Element</span>
+                  <span className="font-bold mt-1 truncate">var(--muted)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Language Selection Section */}
+            <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                  <Globe className="size-4" />
+                  <span>{t("languageTitle")} &amp; Bản Địa Hóa (Localization)</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Chọn ngôn ngữ hiển thị giao diện cho toàn bộ hệ thống bán hàng, điều phối kho vận và kế toán.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {SUPPORTED_LANGUAGES.map((opt) => {
+                  const isSelected = language === opt.code;
+                  return (
+                    <div
+                      key={opt.code}
+                      onClick={() => {
+                        soundFX.playClick();
+                        setLanguage(opt.code);
+                      }}
+                      className={`relative p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                        isSelected
+                          ? 'border-amber-500 bg-amber-500/10 shadow-sm text-slate-950 dark:text-white dark:bg-amber-950/20'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{opt.flag}</span>
+                        <div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                            {opt.nativeLabel}
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono uppercase">
+                            {opt.code} &bull; {opt.label}
+                          </div>
+                        </div>
+                      </div>
+                      {isSelected && (
+                        <div className="size-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center">
+                          <Check className="size-3 stroke-[3]" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

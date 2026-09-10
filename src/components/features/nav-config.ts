@@ -11,6 +11,7 @@ import {
   Settings,
   Gift,
   Cylinder,
+  Receipt,
 } from "lucide-react";
 
 export type NavItem = {
@@ -40,6 +41,7 @@ export const navGroups: NavGroup[] = [
     label: "Kinh doanh & Thực địa",
     items: [
       { href: "/khach-hang", label: "Khách hàng & Công nợ", icon: Users },
+      { href: "/phieu-thu", label: "Sổ phiếu thu nợ", icon: Receipt },
       { href: "/don-hang", label: "Đơn hàng & Kanban", icon: ClipboardList },
       { href: "/fleet", label: "Đội xe & Bảo dưỡng", icon: Truck },
       { href: "/sales", label: "Tuyến Sales & Check-in", icon: Route },

@@ -40,11 +40,7 @@ import { rfmSegmentLabel, type RfmSegment } from "@/lib/rfm-status";
 const DRUM_DEPOSIT_PRICE = 300_000;
 const CREDIT_ALERT_RATIO = 0.85;
 
-const vnd = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-  maximumFractionDigits: 0,
-});
+import { vndFormatter as vnd } from "@/lib/formatMoney";
 
 type RfmFilter = "all" | "need_visit" | "credit_alert";
 

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect, FormEvent } from 'react';
 import { Product, PackageType } from '../types';
-import { formatVND } from '@/lib/remix/mappers';
+import { formatMoney, formatVND } from '@/lib/remix/mappers';
 import {
   Boxes,
   Plus,
@@ -24,6 +24,7 @@ import {
   ArrowUpDown,
   BookOpen,
   PackagePlus,
+  RotateCcw,
 } from 'lucide-react';
 import LubeGuideModal from './LubeGuideModal';
 import { ActionMenu, PageActionMenu } from '@/components/common/ActionMenu';
@@ -75,6 +76,9 @@ export default function ProductsView({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPackage, setSelectedPackage] = useState<string>('all');
+  const [selectedViscosity, setSelectedViscosity] = useState<string>('all');
+  const [selectedStockStatus, setSelectedStockStatus] = useState<string>('all');
+  const [selectedDrumStatus, setSelectedDrumStatus] = useState<string>('all');
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -98,21 +102,115 @@ export default function ProductsView({
     const l = p.volumeLiters || getContainerLiters(p.packageType);
     return sum + p.stock * l;
   }, 0);
-  const lowStockProducts = products.filter((p) => p.stock <= (p.minSafeStock || 5));
+  const lowStockProducts = products.filter((p) => p.stock <= (p.minSafeStock || 10));
 
+  // Trích xuất động các danh mục thực tế từ dữ liệu có trong table
+  const availableCategories = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of products) {
+      const cat = p.category?.trim() || 'Dầu nhớt chuyên dụng';
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [products]);
+
+  // Trích xuất động các quy cách đóng gói thực tế từ dữ liệu có trong table
+  const availablePackages = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of products) {
+      if (p.packageType) {
+        counts[p.packageType] = (counts[p.packageType] || 0) + 1;
+      }
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [products]);
+
+  // Trích xuất động các cấp độ nhớt thực tế từ dữ liệu có trong table
+  const availableViscosities = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of products) {
+      if (p.viscosity?.trim()) {
+        const v = p.viscosity.trim();
+        counts[v] = (counts[v] || 0) + 1;
+      }
+    }
+    return Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [products]);
+
+  // Lọc sản phẩm đa chiều dựa trên dữ liệu bảng thực tế
   const filteredProducts = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
     return products.filter((p) => {
-      const matchSearch =
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.viscosity || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const matchCategory =
-        selectedCategory === 'all' || p.category === selectedCategory;
-      const matchPackage =
-        selectedPackage === 'all' || p.packageType === selectedPackage;
-      return matchSearch && matchCategory && matchPackage;
+      // 1. Tìm kiếm theo từ khóa
+      if (query) {
+        const haystack = [
+          p.name,
+          p.sku,
+          p.brand,
+          p.category,
+          p.viscosity,
+          p.standards,
+          p.packageType,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+
+      // 2. Lọc theo danh mục thực tế
+      if (selectedCategory !== 'all') {
+        const cat = p.category?.trim() || 'Dầu nhớt chuyên dụng';
+        if (cat !== selectedCategory) return false;
+      }
+
+      // 3. Lọc theo quy cách thực tế
+      if (selectedPackage !== 'all' && p.packageType !== selectedPackage) {
+        return false;
+      }
+
+      // 4. Lọc theo cấp độ nhớt thực tế
+      if (selectedViscosity !== 'all' && (p.viscosity || '').trim() !== selectedViscosity) {
+        return false;
+      }
+
+      // 5. Lọc theo trạng thái tồn kho
+      if (selectedStockStatus === 'in_stock' && p.stock <= 0) return false;
+      if (selectedStockStatus === 'low_stock' && (p.stock <= 0 || p.stock > (p.minSafeStock || 10))) return false;
+      if (selectedStockStatus === 'out_of_stock' && p.stock > 0) return false;
+
+      // 6. Lọc theo quản lý vỏ phuy
+      if (selectedDrumStatus === 'drum_only' && !p.drumReturnable) return false;
+      if (selectedDrumStatus === 'small_only' && p.drumReturnable) return false;
+
+      return true;
     });
-  }, [products, searchTerm, selectedCategory, selectedPackage]);
+  }, [
+    products,
+    searchTerm,
+    selectedCategory,
+    selectedPackage,
+    selectedViscosity,
+    selectedStockStatus,
+    selectedDrumStatus,
+  ]);
+
+  const hasActiveFilters =
+    searchTerm.trim() !== '' ||
+    selectedCategory !== 'all' ||
+    selectedPackage !== 'all' ||
+    selectedViscosity !== 'all' ||
+    selectedStockStatus !== 'all' ||
+    selectedDrumStatus !== 'all';
+
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setSelectedCategory('all');
+    setSelectedPackage('all');
+    setSelectedViscosity('all');
+    setSelectedStockStatus('all');
+    setSelectedDrumStatus('all');
+  };
 
   const {
     currentPage,
@@ -129,7 +227,15 @@ export default function ProductsView({
 
   useEffect(() => {
     resetPage();
-  }, [searchTerm, selectedCategory, selectedPackage, resetPage]);
+  }, [
+    searchTerm,
+    selectedCategory,
+    selectedPackage,
+    selectedViscosity,
+    selectedStockStatus,
+    selectedDrumStatus,
+    resetPage,
+  ]);
 
   const handleOpenDrawer = (productToEdit?: Product) => {
     if (productToEdit) {
@@ -374,57 +480,213 @@ export default function ProductsView({
         </div>
       </div>
 
-      {/* 3. Search & Category Filters Toolbar */}
-      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 flex-1 min-w-[280px]">
+      {/* 3. Search & Dynamic Filters Toolbar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+          {/* Ô tìm kiếm thông minh */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Tìm theo tên sản phẩm, mã SKU, thương hiệu (Castrol, Shell...), cấp nhớt 15W-40..."
+              placeholder="Tìm theo tên sản phẩm, mã SKU, thương hiệu, cấp nhớt (15W-40), quy cách..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+              className="w-full pl-10 pr-9 py-2 rounded-xl border border-slate-200 text-xs placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                title="Xóa tìm kiếm"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
+
+          {/* Quick Clear All Filters button if active */}
+          {hasActiveFilters && (
+            <button
+              onClick={handleResetFilters}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition cursor-pointer shrink-0 shadow-2xs"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Xóa bộ lọc ({[
+                searchTerm ? 1 : 0,
+                selectedCategory !== 'all' ? 1 : 0,
+                selectedPackage !== 'all' ? 1 : 0,
+                selectedViscosity !== 'all' ? 1 : 0,
+                selectedStockStatus !== 'all' ? 1 : 0,
+                selectedDrumStatus !== 'all' ? 1 : 0,
+              ].reduce((a, b) => a + b, 0)})</span>
+            </button>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Category Filter */}
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-none focus:border-amber-500 cursor-pointer"
-          >
-            <option value="all">Tất cả danh mục nhớt</option>
-            <option value="Dầu động cơ diesel">Dầu động cơ diesel</option>
-            <option value="Dầu động cơ xăng">Dầu động cơ xăng</option>
-            <option value="Dầu thủy lực công nghiệp">Dầu thủy lực công nghiệp</option>
-            <option value="Dầu hộp số & cầu">Dầu hộp số &amp; cầu</option>
-            <option value="Dầu động cơ xe máy">Dầu động cơ xe máy</option>
-            <option value="Nước làm mát & phụ gia">Nước làm mát &amp; phụ gia</option>
-          </select>
+        {/* Dynamic Filters Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-1 border-t border-slate-100">
+          {/* 1. Category Filter (Dựa trên data thực tế) */}
+          <div className="relative">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className={`w-full px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                selectedCategory !== 'all'
+                  ? 'border-amber-500 bg-amber-50/80 text-amber-900 font-bold'
+                  : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100/60'
+              }`}
+            >
+              <option value="all">🏷️ Danh mục ({products.length})</option>
+              {availableCategories.map(([cat, count]) => (
+                <option key={cat} value={cat}>
+                  {cat} ({count})
+                </option>
+              ))}
+            </select>
+          </div>
 
-          {/* Package Filter */}
-          <select
-            value={selectedPackage}
-            onChange={(e) => setSelectedPackage(e.target.value)}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white focus:outline-none focus:border-amber-500 cursor-pointer"
-          >
-            <option value="all">Tất cả quy cách</option>
-            <option value="Phuy 200L">Phuy 200L (Vỏ sắt hoàn trả)</option>
-            <option value="Thùng 18L">Thùng 18L / Xô</option>
-            <option value="Xô 4L">Xô / Can 4L</option>
-            <option value="Chai 1L">Chai 1L</option>
-          </select>
+          {/* 2. Package Filter (Dựa trên data thực tế) */}
+          <div className="relative">
+            <select
+              value={selectedPackage}
+              onChange={(e) => setSelectedPackage(e.target.value)}
+              className={`w-full px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                selectedPackage !== 'all'
+                  ? 'border-amber-500 bg-amber-50/80 text-amber-900 font-bold'
+                  : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100/60'
+              }`}
+            >
+              <option value="all">📦 Quy cách ({products.length})</option>
+              {availablePackages.map(([pkg, count]) => (
+                <option key={pkg} value={pkg}>
+                  {pkg} ({count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 3. Viscosity Filter (Dựa trên data thực tế) */}
+          <div className="relative">
+            <select
+              value={selectedViscosity}
+              onChange={(e) => setSelectedViscosity(e.target.value)}
+              className={`w-full px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                selectedViscosity !== 'all'
+                  ? 'border-amber-500 bg-amber-50/80 text-amber-900 font-bold'
+                  : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100/60'
+              }`}
+            >
+              <option value="all">💧 Cấp nhớt (Tất cả)</option>
+              {availableViscosities.map(([vis, count]) => (
+                <option key={vis} value={vis}>
+                  {vis} ({count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 4. Stock Status Filter */}
+          <div className="relative">
+            <select
+              value={selectedStockStatus}
+              onChange={(e) => setSelectedStockStatus(e.target.value)}
+              className={`w-full px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                selectedStockStatus !== 'all'
+                  ? 'border-amber-500 bg-amber-50/80 text-amber-900 font-bold'
+                  : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100/60'
+              }`}
+            >
+              <option value="all">📊 Tồn kho (Tất cả)</option>
+              <option value="in_stock">Còn hàng (&gt;0) ({products.filter((p) => p.stock > 0).length})</option>
+              <option value="low_stock">Sắp cạn / An toàn ({products.filter((p) => p.stock <= (p.minSafeStock || 10) && p.stock > 0).length})</option>
+              <option value="out_of_stock">Hết hàng (0) ({products.filter((p) => p.stock === 0).length})</option>
+            </select>
+          </div>
+
+          {/* 5. Drum Filter */}
+          <div className="relative col-span-2 sm:col-span-1">
+            <select
+              value={selectedDrumStatus}
+              onChange={(e) => setSelectedDrumStatus(e.target.value)}
+              className={`w-full px-2.5 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                selectedDrumStatus !== 'all'
+                  ? 'border-amber-500 bg-amber-50/80 text-amber-900 font-bold'
+                  : 'border-slate-200 bg-slate-50/50 text-slate-700 hover:bg-slate-100/60'
+              }`}
+            >
+              <option value="all">🛢️ Vỏ hàng (Tất cả)</option>
+              <option value="drum_only">Phuy thế chân vỏ ({products.filter((p) => p.drumReturnable).length})</option>
+              <option value="small_only">Hàng đóng lẻ ({products.filter((p) => !p.drumReturnable).length})</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Results summary & Active Filter Chips */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <span>
+              Hiển thị <strong className="text-slate-900 font-mono">{filteredProducts.length}</strong> trên tổng số <strong className="text-slate-900 font-mono">{totalSKUs}</strong> sản phẩm
+            </span>
+            {hasActiveFilters && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.2 text-[10px] font-bold text-amber-800">
+                Đang lọc
+              </span>
+            )}
+          </div>
+
+          {/* Active chips */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {searchTerm && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200">
+                  Từ khóa: &quot;{searchTerm}&quot;
+                  <button onClick={() => setSearchTerm('')} className="hover:text-rose-600 cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {selectedCategory !== 'all' && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200">
+                  {selectedCategory}
+                  <button onClick={() => setSelectedCategory('all')} className="hover:text-rose-600 cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {selectedPackage !== 'all' && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200">
+                  {selectedPackage}
+                  <button onClick={() => setSelectedPackage('all')} className="hover:text-rose-600 cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {selectedViscosity !== 'all' && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200">
+                  SAE {selectedViscosity}
+                  <button onClick={() => setSelectedViscosity('all')} className="hover:text-rose-600 cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {selectedStockStatus !== 'all' && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200">
+                  {selectedStockStatus === 'in_stock' ? 'Còn hàng' : selectedStockStatus === 'low_stock' ? 'Sắp cạn' : 'Hết hàng'}
+                  <button onClick={() => setSelectedStockStatus('all')} className="hover:text-rose-600 cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {selectedDrumStatus !== 'all' && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200">
+                  {selectedDrumStatus === 'drum_only' ? 'Vỏ phuy hoàn trả' : 'Hàng đóng lẻ'}
+                  <button onClick={() => setSelectedDrumStatus('all')} className="hover:text-rose-600 cursor-pointer">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -450,7 +712,34 @@ export default function ProductsView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {paginatedProducts.map((p) => {
+              {paginatedProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-500">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="size-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+                        <Package className="size-6" />
+                      </div>
+                      <p className="text-sm font-semibold text-slate-700">
+                        Không tìm thấy sản phẩm phù hợp
+                      </p>
+                      <p className="text-xs text-slate-400 max-w-sm">
+                        Không có sản phẩm nào khớp với tiêu chí tìm kiếm hoặc bộ lọc hiện tại của bạn.
+                      </p>
+                      {hasActiveFilters && (
+                        <button
+                          type="button"
+                          onClick={handleResetFilters}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                        >
+                          <RotateCcw className="size-3.5" />
+                          <span>Đặt lại bộ lọc</span>
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedProducts.map((p) => {
                 const pkgBadge = getPackageBadge(p.packageType);
                 const isLowStock = p.stock <= p.minSafeStock;
                 const stockPercent = Math.min(
@@ -636,7 +925,8 @@ export default function ProductsView({
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
             </tbody>
           </table>
         </div>
@@ -890,16 +1180,16 @@ export default function ProductsView({
                       Giá ĐL Vàng (đ)
                     </label>
                     <input
-                      type="number"
-                      min="0"
-                      value={formData.wholesalePrice}
-                      onChange={(e) =>
+                      type="text"
+                      value={formData.wholesalePrice > 0 ? formatMoney(formData.wholesalePrice) : (formData.wholesalePrice === 0 ? '0' : '')}
+                      onChange={(e) => {
+                        const val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0;
                         setFormData({
                           ...formData,
-                          wholesalePrice: Number(e.target.value),
-                          priceDealer: Number(e.target.value),
-                        })
-                      }
+                          wholesalePrice: val,
+                          priceDealer: val,
+                        });
+                      }}
                       className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs font-mono font-bold focus:border-amber-500"
                     />
                   </div>
@@ -908,12 +1198,12 @@ export default function ProductsView({
                       Giá Gara/Thợ (đ)
                     </label>
                     <input
-                      type="number"
-                      min="0"
-                      value={formData.garagePrice}
-                      onChange={(e) =>
-                        setFormData({ ...formData, garagePrice: Number(e.target.value) })
-                      }
+                      type="text"
+                      value={formData.garagePrice > 0 ? formatMoney(formData.garagePrice) : (formData.garagePrice === 0 ? '0' : '')}
+                      onChange={(e) => {
+                        const val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                        setFormData({ ...formData, garagePrice: val });
+                      }}
                       className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs font-mono font-bold focus:border-amber-500"
                     />
                   </div>
@@ -922,12 +1212,12 @@ export default function ProductsView({
                       Giá Bán lẻ/Fleet (đ)
                     </label>
                     <input
-                      type="number"
-                      min="0"
-                      value={formData.retailPrice}
-                      onChange={(e) =>
-                        setFormData({ ...formData, retailPrice: Number(e.target.value) })
-                      }
+                      type="text"
+                      value={formData.retailPrice > 0 ? formatMoney(formData.retailPrice) : (formData.retailPrice === 0 ? '0' : '')}
+                      onChange={(e) => {
+                        const val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                        setFormData({ ...formData, retailPrice: val });
+                      }}
                       className="w-full px-2.5 py-2 rounded-lg border border-slate-200 text-xs font-mono font-bold focus:border-amber-500"
                     />
                   </div>

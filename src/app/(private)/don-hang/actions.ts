@@ -6,6 +6,7 @@ import { getSessionDbUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getLitersFromVolume } from "@/lib/unitConverter";
 import { resolveTierUnitPrice, calculateVolumeDiscount, type CustomerDealerTier } from "@/lib/pricingEngine";
+import { formatVND } from "@/lib/formatMoney";
 
 export type OrderActionResult = {
   success: boolean;
@@ -207,7 +208,7 @@ export async function createOrder(input: {
       if (isOverLimit) {
         if (!isCreditOverride && !creditOverrideReason) {
           throw new Error(
-            `Vượt hạn mức công nợ. Dư nợ ${currentDebt.toLocaleString("vi-VN")} đ + đơn ${finalTotal.toLocaleString("vi-VN")} đ > hạn mức ${creditLimit.toLocaleString("vi-VN")} đ. Vui lòng gửi lý do bảo lãnh duyệt vượt trần.`,
+            `Vượt hạn mức công nợ. Dư nợ ${formatVND(currentDebt)} + đơn ${formatVND(finalTotal)} > hạn mức ${formatVND(creditLimit)}. Vui lòng gửi lý do bảo lãnh duyệt vượt trần.`,
           );
         }
         isCreditOverride = true;

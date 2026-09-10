@@ -57,6 +57,7 @@ import type { UserRole } from "@prisma/client";
 
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import { useTranslation } from "@/components/providers/language-provider";
 import type { AuthUserProfile } from "@/components/auth/authData";
 import { DEMO_USERS } from "@/components/auth/authData";
 import DashboardView from "./DashboardView";
@@ -67,8 +68,10 @@ import FleetView from "./FleetView";
 import LoyaltyQRView from "./LoyaltyQRView";
 import DrumsView from "./DrumsView";
 import KanbanView from "./KanbanView";
+import DebtReceiptsView from "./DebtReceiptsView";
 import StaffRBACView from "./StaffRBACView";
 import SettingsView from "./SettingsView";
+import ChatWidget from "@/components/chat/ChatWidget";
 
 export type RemixAppContainerProps = {
   initialModule?: NavigationModule;
@@ -127,6 +130,7 @@ const moduleRoutes: Record<NavigationModule, string> = {
   loyalty_qr: "/tich-diem",
   drums: "/vo-phuy",
   kanban: "/don-hang",
+  debt_receipts: "/phieu-thu",
   staff_rbac: "/nhan-su",
   settings: "/cau-hinh",
 };
@@ -141,6 +145,7 @@ const routeModules: Record<string, NavigationModule> = {
   "/tich-diem": "loyalty_qr",
   "/vo-phuy": "drums",
   "/don-hang": "kanban",
+  "/phieu-thu": "debt_receipts",
   "/nhan-su": "staff_rbac",
   "/cau-hinh": "settings",
 };
@@ -158,6 +163,7 @@ export default function RemixAppContainer({
   staffUsers = [],
   sessionUser = null,
 }: RemixAppContainerProps) {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -206,6 +212,7 @@ export default function RemixAppContainer({
     },
   ]);
 
+  // Sync state when props change
   useEffect(() => {
     setProducts(initialProducts);
     setCustomers(initialCustomers);
@@ -227,16 +234,17 @@ export default function RemixAppContainer({
   }, [pathname]);
 
   const moduleTitles: Record<NavigationModule, string> = {
-    dashboard: "Tổng Quan & Phân Tích RFM",
-    products: "Quản Lý Sản Phẩm (Master Data)",
-    customers: "Khách Hàng & Hạn Mức Công Nợ",
-    sales_pwa: "Tuyến Sales & Check-in GPS",
-    fleet: "Quản Trị Đội Xe & Bảo Dưỡng",
-    loyalty_qr: "Trạm Quét QR Tích Điểm Thợ Máy",
-    drums: "Quản Lý Luân Chuyển Vỏ Phuy 200L",
-    kanban: "Đơn Hàng & Kanban Kế Toán",
-    staff_rbac: "Nhân Sự Sales & Phân Quyền RBAC",
-    settings: "Cấu Hình & Tham Số Hệ Thống",
+    dashboard: t("titleDashboard"),
+    products: t("titleProducts"),
+    customers: t("titleCustomers"),
+    sales_pwa: t("titleSalesPwa"),
+    fleet: t("titleFleet"),
+    loyalty_qr: t("titleLoyaltyQr"),
+    drums: t("titleDrums"),
+    kanban: t("titleKanban"),
+    debt_receipts: "Sổ phiếu thu nợ",
+    staff_rbac: t("titleStaffRbac"),
+    settings: t("titleSettings"),
   };
 
   const handleSelectModule = (mod: NavigationModule) => {
@@ -441,14 +449,9 @@ export default function RemixAppContainer({
     });
   };
 
-  const handlePayDebt = (customerId: string, amount: number) => {
-    setCustomers((prev) =>
-      prev.map((c) =>
-        c.id === customerId
-          ? { ...c, currentDebt: Math.max(0, c.currentDebt - amount) }
-          : c,
-      ),
-    );
+  const handlePayDebt = (_customerId: string, _amount: number) => {
+    // Phiếu chỉ PENDING — nợ chưa trừ; refresh để đồng bộ danh sách / lịch sử
+    router.refresh();
   };
 
   const handleSubmitOrder = (newOrder: Order, isOffline: boolean) => {
@@ -1079,7 +1082,7 @@ export default function RemixAppContainer({
   return (
     <div
       id="app-root"
-      className="flex min-h-screen bg-slate-50 font-sans text-slate-900 antialiased"
+      className="flex min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 antialiased transition-colors"
     >
       <Sidebar
         currentModule={currentModule}
@@ -1162,6 +1165,13 @@ export default function RemixAppContainer({
               />
             )}
 
+            {currentModule === "debt_receipts" && (
+              <DebtReceiptsView 
+                sessionUser={resolvedSessionUser} 
+                customers={customers}
+              />
+            )}
+
             {currentModule === "fleet" && (
               <FleetView
                 vehicles={vehicles}
@@ -1220,10 +1230,13 @@ export default function RemixAppContainer({
         </main>
       </div>
 
+      {/* Internal Group Chat Widget */}
+      <ChatWidget sessionUser={resolvedSessionUser} />
+
       {/* Mobile Bottom Navigation Bar (Thumb-friendly 1-tap navigation for mobile field staff) */}
       <nav
         id="mobile-bottom-nav"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 py-1.5 px-3 flex items-center justify-around shadow-xl select-none"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 py-1.5 px-3 flex items-center justify-around shadow-xl select-none transition-colors"
       >
         <button
           type="button"
@@ -1233,12 +1246,12 @@ export default function RemixAppContainer({
           }}
           className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
             currentModule === "dashboard"
-              ? "text-amber-600 font-bold"
-              : "text-slate-500 hover:text-slate-900"
+              ? "text-amber-600 dark:text-amber-400 font-bold"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
           }`}
         >
           <LayoutDashboard className="size-5" />
-          <span className="text-[10px] leading-tight">Tổng quan</span>
+          <span className="text-[10px] leading-tight">{t("bottomNavOverview")}</span>
         </button>
 
         <button
@@ -1249,12 +1262,12 @@ export default function RemixAppContainer({
           }}
           className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all cursor-pointer ${
             currentModule === "customers"
-              ? "text-amber-600 font-bold"
-              : "text-slate-500 hover:text-slate-900"
+              ? "text-amber-600 dark:text-amber-400 font-bold"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
           }`}
         >
           <Users className="size-5" />
-          <span className="text-[10px] leading-tight">Khách hàng</span>
+          <span className="text-[10px] leading-tight">{t("bottomNavCustomers")}</span>
         </button>
 
         {/* Central Prominent Sales CTA Button */}
@@ -1267,10 +1280,10 @@ export default function RemixAppContainer({
           className="flex flex-col items-center -mt-5 cursor-pointer"
           title="Lên đơn bán hàng thực địa"
         >
-          <div className="size-12 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg ring-4 ring-white active:scale-95 transition-all">
+          <div className="size-12 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg ring-4 ring-white dark:ring-slate-900 active:scale-95 transition-all">
             <ShoppingCart className="size-5" />
           </div>
-          <span className="text-[10px] font-bold text-slate-800 mt-0.5">Lên đơn</span>
+          <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 mt-0.5">{t("bottomNavOrderNow")}</span>
         </button>
 
         <button
@@ -1281,14 +1294,14 @@ export default function RemixAppContainer({
           }}
           className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl relative transition-all cursor-pointer ${
             currentModule === "kanban"
-              ? "text-amber-600 font-bold"
-              : "text-slate-500 hover:text-slate-900"
+              ? "text-amber-600 dark:text-amber-400 font-bold"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
           }`}
         >
           <Layers className="size-5" />
-          <span className="text-[10px] leading-tight">Đơn hàng</span>
+          <span className="text-[10px] leading-tight">{t("bottomNavOrders")}</span>
           {pendingOrdersCount > 0 && (
-            <span className="absolute top-0 right-1 size-2 rounded-full bg-rose-500 ring-2 ring-white" />
+            <span className="absolute top-0 right-1 size-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />
           )}
         </button>
 
@@ -1298,10 +1311,10 @@ export default function RemixAppContainer({
             soundFX.playClick();
             setIsMobileMenuOpen(true);
           }}
-          className="flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-slate-500 hover:text-slate-900 transition-all cursor-pointer"
+          className="flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all cursor-pointer"
         >
           <Menu className="size-5" />
-          <span className="text-[10px] leading-tight">Thêm</span>
+          <span className="text-[10px] leading-tight">{t("bottomNavMore")}</span>
         </button>
       </nav>
     </div>

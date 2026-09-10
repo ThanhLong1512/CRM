@@ -18,18 +18,98 @@ import type {
 } from "@/types";
 import type { OrderStatus as PrismaOrderStatus } from "@prisma/client";
 
-export function formatVND(amount: number): string {
-  return new Intl.NumberFormat("vi-VN").format(amount) + " đ";
+export function formatMoney(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === "") return "0";
+  const num = Math.round(Number(amount));
+  if (isNaN(num)) return "0";
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+export function formatVND(amount: number | string | null | undefined, includeUnit: boolean = true): string {
+  const formatted = formatMoney(amount);
+  return includeUnit ? `${formatted} đ` : formatted;
 }
 
 export function volumeToPackageType(
   volume: string | null | undefined,
+  name?: string,
 ): PackageType {
+  const n = (name || "").toLowerCase();
+  if (n.includes("phuy 200l") || volume === "200") return "Phuy 200L";
+  if (n.includes("phuy 208l") || volume === "208") return "Phuy 208L";
+  if (n.includes("thùng 18l")) return "Thùng 18L";
+  if (n.includes("xô 18l")) return "Xô 18L";
+  if (n.includes("xô 4l")) return "Xô 4L";
+  if (n.includes("can 4l")) return "Can 4L";
+
   const liters = parseProductLiters(volume);
-  if (liters >= 150) return "Phuy 208L";
-  if (liters >= 10) return "Xô 18L";
+  if (liters >= 205) return "Phuy 208L";
+  if (liters >= 150) return "Phuy 200L";
+  if (liters >= 15) return "Thùng 18L";
   if (liters >= 3) return "Can 4L";
   return "Chai 1L";
+}
+
+export function inferProductCategory(name: string, viscosity?: string | null): string {
+  const n = (name || "").toLowerCase();
+  const v = (viscosity || "").toLowerCase();
+  if (n.includes("diesel") || v.includes("ci-4") || v.includes("ck-4")) return "Dầu động cơ diesel";
+  if (n.includes("thủy lực") || n.includes("hydraulic") || v.includes("iso vg") || v.includes("hlp")) return "Dầu thủy lực công nghiệp";
+  if (n.includes("hộp số") || n.includes("cầu") || n.includes("atf") || n.includes("gear") || v.includes("gl-5")) return "Dầu hộp số & cầu";
+  if (n.includes("xe máy") || n.includes("20w-50") || v.includes("ma2")) return "Dầu động cơ xe máy";
+  if (n.includes("làm mát") || n.includes("coolant") || n.includes("phụ gia")) return "Nước làm mát & phụ gia";
+  if (n.includes("ô tô") || n.includes("du lịch") || n.includes("hybrid") || v.includes("0w-20") || v.includes("5w-30") || v.includes("10w-40")) return "Dầu động cơ ô tô du lịch";
+  return "Dầu nhớt chuyên dụng";
+}
+
+export function inferProductBrand(name: string, sku: string): string {
+  const n = (name || "").toLowerCase();
+  if (n.includes("bluetech") || sku.startsWith("BLT")) return "BlueTech";
+  if (n.includes("castrol")) return "Castrol";
+  if (n.includes("shell")) return "Shell";
+  if (n.includes("motul")) return "Motul";
+  if (n.includes("total")) return "TotalEnergies";
+  if (n.includes("caltex") || n.includes("delo")) return "Caltex";
+  return "Đại An Lube";
+}
+
+export function inferBaseOil(name: string): "Khoáng" | "Bán tổng hợp" | "Tổng hợp toàn phần" {
+  const n = (name || "").toLowerCase();
+  if (n.includes("full synthetic") || n.includes("toàn phần")) return "Tổng hợp toàn phần";
+  if (n.includes("semi-synthetic") || n.includes("bán tổng hợp")) return "Bán tổng hợp";
+  return "Khoáng";
+}
+
+export function mapProductDto(dto: ProductDto): Product {
+  const unitPrice = dto.unitPrice;
+  const wholesalePrice = dto.wholesalePrice ?? unitPrice;
+  const garagePrice = dto.garagePrice ?? unitPrice;
+  const retailPrice = dto.retailPrice ?? Math.round(unitPrice * 1.15);
+  return {
+    id: dto.id,
+    name: dto.name,
+    sku: dto.sku,
+    unit: "Lít",
+    packageType: volumeToPackageType(dto.volume, dto.name),
+    viscosity: dto.viscosity ?? "",
+    standards: dto.standard ?? "",
+    baseOil: inferBaseOil(dto.name),
+    drumReturnable: dto.isDrum,
+    priceDealer: wholesalePrice,
+    priceMechanic: garagePrice,
+    priceFleet: unitPrice,
+    wholesalePrice,
+    garagePrice,
+    retailPrice,
+    volumeLiters: dto.volumeLiters ?? parseProductLiters(dto.volume),
+    stock: dto.stock,
+    minSafeStock: 10,
+    maxStock: Math.max(dto.stock, 100),
+    vatPercent: 10,
+    brand: inferProductBrand(dto.name, dto.sku),
+    category: inferProductCategory(dto.name, dto.viscosity),
+    isForSale: true,
+  };
 }
 
 export function mapCustomerType(type: "GARAGE" | "FLEET"): CustomerType {
@@ -88,37 +168,6 @@ function mapRfmSegment(
   }
 }
 
-export function mapProductDto(dto: ProductDto): Product {
-  const unitPrice = dto.unitPrice;
-  const wholesalePrice = dto.wholesalePrice ?? unitPrice;
-  const garagePrice = dto.garagePrice ?? unitPrice;
-  const retailPrice = dto.retailPrice ?? Math.round(unitPrice * 1.15);
-  return {
-    id: dto.id,
-    name: dto.name,
-    sku: dto.sku,
-    unit: "Lít",
-    packageType: volumeToPackageType(dto.volume),
-    viscosity: dto.viscosity ?? "",
-    standards: dto.standard ?? "",
-    baseOil: "Khoáng",
-    drumReturnable: dto.isDrum,
-    priceDealer: wholesalePrice,
-    priceMechanic: garagePrice,
-    priceFleet: unitPrice,
-    wholesalePrice,
-    garagePrice,
-    retailPrice,
-    volumeLiters: dto.volumeLiters ?? parseProductLiters(dto.volume),
-    stock: dto.stock,
-    minSafeStock: 0,
-    maxStock: Math.max(dto.stock, 100),
-    vatPercent: 10,
-    brand: "",
-    category: "",
-    isForSale: true,
-  };
-}
 
 export function mapCustomerDto(
   dto: CustomerDto,

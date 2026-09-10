@@ -5,6 +5,7 @@ import { getSessionDbUser } from "@/lib/auth";
 import { listDrumTransactions } from "@/lib/data/drums";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { formatVND } from "@/lib/formatMoney";
 
 export type DrumActionResult = {
   success: boolean;
@@ -110,7 +111,7 @@ export async function issueDrums(input: {
   }
 
   revalidateDrumPaths();
-  return ok(`Đã xuất ${quantity} vỏ phuy${chargeToDebt ? ` (+${(quantity * depositPerDrum).toLocaleString("vi-VN")} đ cọc)` : ""}.`);
+  return ok(`Đã xuất ${quantity} vỏ phuy${chargeToDebt ? ` (+${formatVND(quantity * depositPerDrum)} cọc)` : ""}.`);
 }
 
 export async function returnDrums(input: {
@@ -179,7 +180,7 @@ export async function returnDrums(input: {
   }
 
   revalidateDrumPaths();
-  return ok(`Đã thu ${quantity} vỏ phuy${deductFromDebt ? ` (Đã cấn trừ -${(quantity * depositPerDrum).toLocaleString("vi-VN")} đ vào công nợ)` : ""}.`);
+  return ok(`Đã thu ${quantity} vỏ phuy${deductFromDebt ? ` (Đã cấn trừ -${formatVND(quantity * depositPerDrum)} vào công nợ)` : ""}.`);
 }
 
 /** Điều chỉnh số dư đang giữ về đúng `targetOutstanding`. */

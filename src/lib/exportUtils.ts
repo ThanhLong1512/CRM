@@ -158,3 +158,65 @@ export function exportOrdersReport(orders: Order[]) {
 
   exportToCsv(filename, headers, rows);
 }
+
+/**
+ * Export Debt Payment Receipts Report to Excel-compatible CSV
+ */
+export function exportDebtPaymentsReport(
+  payments: Array<{
+    receiptNumber: string;
+    createdAt: string;
+    customerName?: string;
+    customerId: string;
+    amount: number;
+    method: string;
+    status: string;
+    userName?: string;
+    approvedBy?: string | null;
+    approvedAt?: string | null;
+    cancelledBy?: string | null;
+    cancelReason?: string | null;
+    notes?: string | null;
+  }>
+) {
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const filename = `So_Phieu_Thu_No_${dateStr}`;
+
+  const headers = [
+    "Mã Phiếu Thu",
+    "Thời Gian Lập",
+    "Tên Khách Hàng / Đại Lý",
+    "Mã Khách Hàng",
+    "Số Tiền (VNĐ)",
+    "Hình Thức",
+    "Trạng Thái",
+    "Người Lập Phiếu",
+    "Người Duyệt",
+    "Thời Gian Duyệt",
+    "Người Hủy",
+    "Lý Do Hủy",
+    "Ghi Chú",
+  ];
+
+  const rows = payments.map((p) => [
+    p.receiptNumber,
+    new Date(p.createdAt).toLocaleString("vi-VN"),
+    p.customerName || p.customerId,
+    p.customerId,
+    p.amount,
+    p.method === "BANK_TRANSFER" ? "Chuyển khoản" : "Tiền mặt",
+    p.status === "APPROVED"
+      ? "Đã duyệt"
+      : p.status === "CANCELLED"
+      ? "Đã hủy"
+      : "Chờ duyệt",
+    p.userName || "—",
+    p.approvedBy || "—",
+    p.approvedAt ? new Date(p.approvedAt).toLocaleString("vi-VN") : "—",
+    p.cancelledBy || "—",
+    p.cancelReason || "—",
+    p.notes || "",
+  ]);
+
+  exportToCsv(filename, headers, rows);
+}

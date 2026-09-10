@@ -46,10 +46,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-const vndFormatter = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-});
+import { vndFormatter } from "@/lib/formatMoney";
 
 function statusBadgeVariant(
   status: string,

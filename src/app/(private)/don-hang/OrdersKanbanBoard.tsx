@@ -27,10 +27,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-const vndFormatter = new Intl.NumberFormat("vi-VN", {
-  style: "currency",
-  currency: "VND",
-});
+import { vndFormatter } from "@/lib/formatMoney";
 
 const KANBAN_COLUMNS: {
   id: Extract<OrderStatusDto, "PENDING" | "CONFIRMED" | "SHIPPED">;

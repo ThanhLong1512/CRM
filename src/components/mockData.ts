@@ -619,7 +619,9 @@ export function calculateHaversineDistance(
   return Math.round(R * c);
 }
 
-// Format Currency in Vietnamese Dong
-export function formatVND(amount: number): string {
-  return new Intl.NumberFormat('vi-VN').format(amount) + ' đ';
+export function formatVND(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === '') return '0 đ';
+  const num = Math.round(Number(amount));
+  if (isNaN(num)) return '0 đ';
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' đ';
 }

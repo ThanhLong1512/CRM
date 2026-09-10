@@ -1,6 +1,7 @@
 "use client";
 import { ElementType } from 'react';
 import AppLogo from '@/components/common/AppLogo';
+import { useTranslation } from '@/components/providers/language-provider';
 import { NavigationModule } from '../types';
 import {
   LayoutDashboard,
@@ -15,6 +16,7 @@ import {
   Flame,
   Settings,
   X,
+  Receipt,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -49,13 +51,15 @@ export default function Sidebar({
   isOpenMobile = false,
   onCloseMobile,
 }: SidebarProps) {
+  const { t } = useTranslation();
+
   const navigationGroups: NavGroup[] = [
     {
-      groupLabel: 'TỔNG QUAN',
+      groupLabel: t('navOverview'),
       items: [
         {
           id: 'dashboard',
-          label: 'Dashboard & RFM',
+          label: t('modDashboard'),
           icon: LayoutDashboard,
           badge: rfmAlertCount > 0 ? rfmAlertCount : undefined,
           badgeVariant: 'warning',
@@ -63,65 +67,70 @@ export default function Sidebar({
       ],
     },
     {
-      groupLabel: 'KINH DOANH & THỰC ĐỊA',
+      groupLabel: t('navSalesField'),
       items: [
         {
           id: 'customers',
-          label: 'Khách Hàng & Công Nợ',
+          label: t('modCustomers'),
           icon: Users,
         },
         {
           id: 'kanban',
-          label: 'Đơn Hàng & Kanban',
+          label: t('modOrders'),
           icon: ShoppingCart,
           badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined,
           badgeVariant: 'info',
         },
         {
+          id: 'debt_receipts',
+          label: 'Sổ phiếu thu nợ',
+          icon: Receipt,
+        },
+        {
           id: 'fleet',
-          label: 'Đội Xe & Bảo Dưỡng',
+          label: t('modFleet'),
           icon: Truck,
           badge: urgentFleetCount > 0 ? urgentFleetCount : undefined,
           badgeVariant: 'critical',
         },
         {
           id: 'sales_pwa',
-          label: 'Tuyến Sales & Check-in GPS',
+          label: t('modSalesPwa'),
           icon: MapPin,
         },
         {
           id: 'loyalty_qr',
-          label: 'Tích Điểm Thợ Máy',
+          label: t('modLoyaltyQr'),
           icon: QrCode,
         },
       ],
     },
     {
-      groupLabel: 'KHO & HÀNG HÓA',
+      groupLabel: t('navInventoryWarehouse'),
       items: [
         {
           id: 'products',
-          label: 'Master Data Sản Phẩm',
+          label: t('modProducts'),
           icon: Boxes,
         },
         {
           id: 'drums',
-          label: 'Quản Lý Vỏ Phuy 200L',
+          label: t('modDrums'),
           icon: Package,
         },
       ],
     },
     {
-      groupLabel: 'HỆ THỐNG',
+      groupLabel: t('navSystem'),
       items: [
         {
           id: 'staff_rbac',
-          label: 'Nhân Sự & Phân Quyền',
+          label: t('modStaffRbac'),
           icon: ShieldCheck,
         },
         {
           id: 'settings',
-          label: 'Cấu Hình Hệ Thống',
+          label: t('modSettings'),
           icon: Settings,
         },
       ],
@@ -147,7 +156,7 @@ export default function Sidebar({
             <button
               onClick={onCloseMobile}
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-              title="Đóng menu"
+              title={t("closeMenu")}
             >
               <X className="w-5 h-5" />
             </button>
@@ -156,7 +165,7 @@ export default function Sidebar({
 
         <div className="px-4 py-2 border-b border-slate-800/50 bg-[#0F172A]/50 text-[11px] text-slate-400 flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-          <span>Chi nhánh Phía Nam &bull; v2.5 Pro</span>
+          <span>{t("branchName")} &bull; {t("version")}</span>
         </div>
 
         {/* Navigation Groups */}
@@ -217,17 +226,19 @@ export default function Sidebar({
         </nav>
       </div>
 
+
+
       {/* Warehouse & Quick Info Footer */}
       <div className="p-3 m-3 rounded-xl bg-slate-800/60 border border-slate-700/80 text-xs text-slate-300 shrink-0">
         <div className="flex items-center justify-between text-white font-semibold mb-1">
-          <span className="text-[11px]">Kho Tổng Bình Chánh</span>
+          <span className="text-[11px]">{t("centralWarehouse")}</span>
           <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded font-mono">
-            Sẵn sàng
+            {t("warehouseStatusReady")}
           </span>
         </div>
-        <div className="text-[11px] text-slate-400">QL1A, H. Bình Chánh, TP.HCM</div>
+        <div className="text-[11px] text-slate-400">{t("warehouseAddress")}</div>
         <div className="mt-2 pt-2 border-t border-slate-700/60 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-          <span>Hotline Kỹ thuật</span>
+          <span>{t("technicalHotline")}</span>
           <span className="text-amber-400 font-bold">1900 6868</span>
         </div>
       </div>

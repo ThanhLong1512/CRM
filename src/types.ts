@@ -39,6 +39,8 @@ export interface Product {
 
 export type PaymentMethod = 'CASH' | 'BANK_TRANSFER';
 
+export type DebtPaymentStatus = 'PENDING' | 'APPROVED' | 'CANCELLED';
+
 export interface DebtPayment {
   id: string;
   receiptNumber: string;
@@ -47,6 +49,12 @@ export interface DebtPayment {
   amount: number;
   method: PaymentMethod;
   notes?: string | null;
+  status: DebtPaymentStatus;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  cancelledBy?: string | null;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
   userId: string;
   userName?: string;
   createdAt: string;
@@ -244,5 +252,6 @@ export type NavigationModule =
   | 'loyalty_qr'
   | 'drums'
   | 'kanban'
+  | 'debt_receipts'
   | 'staff_rbac'
   | 'settings';

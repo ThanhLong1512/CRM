@@ -10,6 +10,7 @@ const PROTECTED_PREFIXES: readonly string[] = [
   "/vo-phuy",
   "/tich-diem",
   "/sales",
+  "/phieu-thu",
   "/nhan-su",
   "/cau-hinh",
 ];

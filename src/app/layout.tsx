@@ -5,6 +5,8 @@ import {
   Outfit,
 } from "next/font/google";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { ThemeProvider } from "@/components/providers/theme-provider";
+import { LanguageProvider } from "@/components/providers/language-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -36,11 +38,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="vi"
+      suppressHydrationWarning
       className={`${beVietnam.variable} ${outfit.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">
-        <QueryProvider>{children}</QueryProvider>
-        <Toaster richColors closeButton position="top-right" />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange={false}
+        >
+          <LanguageProvider>
+            <QueryProvider>{children}</QueryProvider>
+            <Toaster richColors closeButton position="top-right" />
+          </LanguageProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
